@@ -32,3 +32,9 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Tool outputs (not part of the project)
+graphify-out/
+
+# TypeScript incremental build info
+*.tsbuildinfo
