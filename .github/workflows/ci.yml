@@ -77,7 +77,7 @@ jobs:
           cache: pip
 
       - name: Install linting tools
-        run: pip install ruff mypy
+        run: pip install ruff mypy types-cachetools
 
       - name: ruff check
         run: ruff check app/ scheduler/ tests/ --select E,F,W,I --ignore E501
