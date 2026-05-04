@@ -88,12 +88,8 @@ services:
         condition: service_healthy
     environment:
       NEXT_PUBLIC_API_URL: /api
-    healthcheck:
-      # curl is installed in the runner stage — follows redirects, exits 0 on any 2xx/3xx.
-      test: ["CMD", "curl", "-sf", "http://localhost:3000/"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
+    # No health check — Next.js standalone starts in ~100 ms and nginx's
+    # upstream_tries handles any brief startup gap gracefully.
 
   # ── APScheduler (connector syncs + alert evaluation) ─────────────────────
   scheduler:
@@ -123,7 +119,7 @@ services:
       app:
         condition: service_healthy
       frontend:
-        condition: service_healthy
+        condition: service_started   # frontend has no health check — starts in ~100 ms
       auth:
         condition: service_healthy
     ports:
