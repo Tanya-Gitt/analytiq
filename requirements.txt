@@ -4,6 +4,7 @@
 # Web framework
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9   # required by FastAPI for File/UploadFile (file upload endpoints)
 
 # Database
 asyncpg>=0.29.0
@@ -24,5 +25,5 @@ apscheduler>=3.10.0
 # Config
 python-dotenv>=1.0.0
 
-# Caching (dashboard TTL cache — TODO-1)
+# Caching (dashboard TTL cache)
 cachetools>=5.3.0
