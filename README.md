@@ -45,29 +45,28 @@ Event tracking + e-commerce analytics in a single Docker Compose stack — no Sa
 
 ## 🏗️ Architecture
 
-```
-                        ┌─────────────────────────────────┐
-Browser / Client        │          nginx : 80              │
-                        │                                   │
-                        │  /api/*  ──►  FastAPI : 8000     │
-                        │  /sdk/*  ──►  FastAPI : 8000     │
-                        │  /*      ──►  Next.js : 3000     │
-                        └────────────┬────────────────────┘
-                                     │
-                    ┌────────────────▼────────────────────┐
-                    │         PostgreSQL : 5432             │
-                    │   Row-Level Security (per-org RLS)   │
-                    │   schema: orgs, users, events,       │
-                    │           orders, connectors,        │
-                    │           alert_rules, sync_runs     │
-                    └────────────┬────────────────────────┘
-                                 │
-                    ┌────────────▼────────────────────────┐
-                    │    APScheduler (scheduler service)   │
-                    │    · connector polling (60s)         │
-                    │    · alert evaluation (60s)          │
-                    │    · orphan run recovery (5m)        │
-                    └─────────────────────────────────────┘
+```mermaid
+graph TD
+    Client(["🌐 Browser / Client"])
+
+    subgraph Docker Compose Stack
+        nginx["nginx :80\n──────────────────\n/api/*  →  FastAPI :8000\n/sdk/*  →  FastAPI :8000\n/*      →  Next.js :3000"]
+
+        subgraph Backend
+            api["⚡ FastAPI\nREST API · RLS auth · Rate limiting"]
+            frontend["🖥️ Next.js\nDashboard UI · Recharts"]
+        end
+
+        db[("🐘 PostgreSQL :5432\nRow-Level Security\norgs · users · events · orders\nconnectors · alert_rules · sync_runs")]
+
+        scheduler["🕐 APScheduler\nConnector polling (60s)\nAlert evaluation (60s)\nOrphan recovery (5m)"]
+    end
+
+    Client --> nginx
+    nginx --> api
+    nginx --> frontend
+    api --> db
+    scheduler --> db
 ```
 
 **Six containers:** `postgres` · `app` (FastAPI) · `frontend` (Next.js) · `scheduler` · `nginx`
