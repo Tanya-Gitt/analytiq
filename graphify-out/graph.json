@@ -1,0 +1,343 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "hyperedges": [
+      {
+        "id": "db_stack",
+        "label": "Database Access Stack",
+        "nodes": [
+          "requirements_sqlalchemy",
+          "requirements_pymysql",
+          "requirements_pandas"
+        ],
+        "relation": "implement",
+        "confidence": "INFERRED",
+        "confidence_score": 0.85,
+        "source_file": "requirements.txt"
+      },
+      {
+        "id": "env_http_stack",
+        "label": "HTTP and Environment Configuration Stack",
+        "nodes": [
+          "requirements_requests",
+          "requirements_python_dotenv"
+        ],
+        "relation": "implement",
+        "confidence": "INFERRED",
+        "confidence_score": 0.75,
+        "source_file": "requirements.txt"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "label": "etl.py",
+      "file_type": "code",
+      "source_file": "/Users/krishna/live_product_monitoring/etl.py",
+      "source_location": "L1",
+      "id": "users_krishna_live_product_monitoring_etl_py",
+      "community": 1,
+      "norm_label": "etl.py"
+    },
+    {
+      "label": "clean_dataframe()",
+      "file_type": "code",
+      "source_file": "/Users/krishna/live_product_monitoring/etl.py",
+      "source_location": "L19",
+      "id": "etl_clean_dataframe",
+      "community": 1,
+      "norm_label": "clean_dataframe()"
+    },
+    {
+      "label": "upsert_orders()",
+      "file_type": "code",
+      "source_file": "/Users/krishna/live_product_monitoring/etl.py",
+      "source_location": "L30",
+      "id": "etl_upsert_orders",
+      "community": 1,
+      "norm_label": "upsert_orders()"
+    },
+    {
+      "label": "main()",
+      "file_type": "code",
+      "source_file": "/Users/krishna/live_product_monitoring/etl.py",
+      "source_location": "L82",
+      "id": "etl_main",
+      "community": 1,
+      "norm_label": "main()"
+    },
+    {
+      "label": "generate_sample.py",
+      "file_type": "code",
+      "source_file": "/Users/krishna/live_product_monitoring/generate_sample.py",
+      "source_location": "L1",
+      "id": "users_krishna_live_product_monitoring_generate_sample_py",
+      "community": 2,
+      "norm_label": "generate_sample.py"
+    },
+    {
+      "label": "pandas",
+      "file_type": "code",
+      "source_file": "requirements.txt",
+      "source_location": "line 1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "requirements_pandas",
+      "community": 0,
+      "norm_label": "pandas"
+    },
+    {
+      "label": "SQLAlchemy",
+      "file_type": "code",
+      "source_file": "requirements.txt",
+      "source_location": "line 2",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "requirements_sqlalchemy",
+      "community": 0,
+      "norm_label": "sqlalchemy"
+    },
+    {
+      "label": "PyMySQL",
+      "file_type": "code",
+      "source_file": "requirements.txt",
+      "source_location": "line 3",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "requirements_pymysql",
+      "community": 0,
+      "norm_label": "pymysql"
+    },
+    {
+      "label": "requests",
+      "file_type": "code",
+      "source_file": "requirements.txt",
+      "source_location": "line 4",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "requirements_requests",
+      "community": 0,
+      "norm_label": "requests"
+    },
+    {
+      "label": "python-dotenv",
+      "file_type": "code",
+      "source_file": "requirements.txt",
+      "source_location": "line 5",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "requirements_python_dotenv",
+      "community": 0,
+      "norm_label": "python-dotenv"
+    },
+    {
+      "label": "Live Product Monitoring Project",
+      "file_type": "code",
+      "source_file": "requirements.txt",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "requirements_live_product_monitoring",
+      "community": 0,
+      "norm_label": "live product monitoring project"
+    }
+  ],
+  "links": [
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/krishna/live_product_monitoring/etl.py",
+      "source_location": "L19",
+      "weight": 1.0,
+      "_src": "users_krishna_live_product_monitoring_etl_py",
+      "_tgt": "etl_clean_dataframe",
+      "source": "users_krishna_live_product_monitoring_etl_py",
+      "target": "etl_clean_dataframe",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/krishna/live_product_monitoring/etl.py",
+      "source_location": "L30",
+      "weight": 1.0,
+      "_src": "users_krishna_live_product_monitoring_etl_py",
+      "_tgt": "etl_upsert_orders",
+      "source": "users_krishna_live_product_monitoring_etl_py",
+      "target": "etl_upsert_orders",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/krishna/live_product_monitoring/etl.py",
+      "source_location": "L82",
+      "weight": 1.0,
+      "_src": "users_krishna_live_product_monitoring_etl_py",
+      "_tgt": "etl_main",
+      "source": "users_krishna_live_product_monitoring_etl_py",
+      "target": "etl_main",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/krishna/live_product_monitoring/etl.py",
+      "source_location": "L102",
+      "weight": 1.0,
+      "_src": "etl_main",
+      "_tgt": "etl_clean_dataframe",
+      "source": "etl_clean_dataframe",
+      "target": "etl_main",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "/Users/krishna/live_product_monitoring/etl.py",
+      "source_location": "L107",
+      "weight": 1.0,
+      "_src": "etl_main",
+      "_tgt": "etl_upsert_orders",
+      "source": "etl_upsert_orders",
+      "target": "etl_main",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "requirements.txt",
+      "source_location": "line 1",
+      "weight": 1.0,
+      "_src": "requirements_live_product_monitoring",
+      "_tgt": "requirements_pandas",
+      "source": "requirements_pandas",
+      "target": "requirements_live_product_monitoring"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "requirements.txt",
+      "source_location": "lines 1-2",
+      "weight": 0.8,
+      "_src": "requirements_sqlalchemy",
+      "_tgt": "requirements_pandas",
+      "source": "requirements_pandas",
+      "target": "requirements_sqlalchemy"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "requirements.txt",
+      "source_location": "line 2",
+      "weight": 1.0,
+      "_src": "requirements_live_product_monitoring",
+      "_tgt": "requirements_sqlalchemy",
+      "source": "requirements_sqlalchemy",
+      "target": "requirements_live_product_monitoring"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "requirements.txt",
+      "source_location": "lines 2-3",
+      "weight": 0.9,
+      "_src": "requirements_sqlalchemy",
+      "_tgt": "requirements_pymysql",
+      "source": "requirements_sqlalchemy",
+      "target": "requirements_pymysql"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "requirements.txt",
+      "source_location": "line 3",
+      "weight": 1.0,
+      "_src": "requirements_live_product_monitoring",
+      "_tgt": "requirements_pymysql",
+      "source": "requirements_pymysql",
+      "target": "requirements_live_product_monitoring"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "requirements.txt",
+      "source_location": "line 4",
+      "weight": 1.0,
+      "_src": "requirements_live_product_monitoring",
+      "_tgt": "requirements_requests",
+      "source": "requirements_requests",
+      "target": "requirements_live_product_monitoring"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "requirements.txt",
+      "source_location": "lines 4-5",
+      "weight": 0.7,
+      "_src": "requirements_requests",
+      "_tgt": "requirements_python_dotenv",
+      "source": "requirements_requests",
+      "target": "requirements_python_dotenv"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "requirements.txt",
+      "source_location": "line 5",
+      "weight": 1.0,
+      "_src": "requirements_live_product_monitoring",
+      "_tgt": "requirements_python_dotenv",
+      "source": "requirements_python_dotenv",
+      "target": "requirements_live_product_monitoring"
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "db_stack",
+      "label": "Database Access Stack",
+      "nodes": [
+        "requirements_sqlalchemy",
+        "requirements_pymysql",
+        "requirements_pandas"
+      ],
+      "relation": "implement",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "requirements.txt"
+    },
+    {
+      "id": "env_http_stack",
+      "label": "HTTP and Environment Configuration Stack",
+      "nodes": [
+        "requirements_requests",
+        "requirements_python_dotenv"
+      ],
+      "relation": "implement",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "requirements.txt"
+    }
+  ]
+}

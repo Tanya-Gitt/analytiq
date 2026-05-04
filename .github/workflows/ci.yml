@@ -1,0 +1,172 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ── Python backend tests ───────────────────────────────────────────────────
+  test-backend:
+    name: Backend tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: analytics_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/analytics_test
+      JWT_SECRET: test-secret-at-least-32-chars-long-for-ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install runtime + dev dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v --tb=short \
+            --cov=app --cov=scheduler \
+            --cov-report=term-missing \
+            --cov-report=xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  # ── Python linting / type check ────────────────────────────────────────────
+  lint-backend:
+    name: Lint (ruff + mypy)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install linting tools
+        run: pip install ruff mypy
+
+      - name: ruff check
+        run: ruff check app/ scheduler/ tests/ --select E,F,W,I --ignore E501
+
+      - name: mypy
+        run: mypy app/ scheduler/ --ignore-missing-imports --no-strict-optional
+
+  # ── Frontend build ─────────────────────────────────────────────────────────
+  build-frontend:
+    name: Next.js build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Type check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: /api
+        run: npm run build
+
+  # ── Docker Compose smoke test ──────────────────────────────────────────────
+  smoke-test:
+    name: Docker Compose smoke test
+    runs-on: ubuntu-latest
+    # Only run on push to main — slower, skip on every PR
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env
+        run: |
+          echo "POSTGRES_PASSWORD=ci_password_$(openssl rand -hex 8)" >> .env
+          echo "JWT_SECRET=ci_jwt_secret_$(openssl rand -hex 16)"    >> .env
+
+      - name: Build and start stack
+        run: docker compose up --build -d
+
+      - name: Wait for app to be healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost/api/health; then
+              echo "App is healthy"
+              exit 0
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 5
+          done
+          echo "Timed out waiting for app"
+          docker compose logs
+          exit 1
+
+      - name: Signup + login smoke test
+        run: |
+          # Signup
+          RESPONSE=$(curl -sf -X POST http://localhost/api/auth/signup \
+            -H "Content-Type: application/json" \
+            -d '{"org_name":"CI Org","email":"ci@test.com","password":"testpass123"}')
+          echo "Signup response: $RESPONSE"
+          TOKEN=$(echo $RESPONSE | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+          # Dashboard (authenticated)
+          curl -sf http://localhost/api/dashboard/segment-b \
+            -H "Authorization: Bearer $TOKEN"
+          echo "Dashboard OK"
+
+          # SDK static file
+          curl -sf http://localhost/sdk/analytics.js | head -5
+          echo "SDK file served OK"
+
+      - name: Print logs on failure
+        if: failure()
+        run: docker compose logs --tail=50
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

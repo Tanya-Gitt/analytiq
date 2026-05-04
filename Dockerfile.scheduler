@@ -1,0 +1,12 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Scheduler shares the app/ package (for coerce_row, auth utils, etc.)
+COPY app/ ./app/
+COPY scheduler/ ./scheduler/
+
+CMD ["python", "-m", "scheduler.main"]

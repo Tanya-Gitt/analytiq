@@ -1,0 +1,12 @@
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E501",   # line too long — handled separately
+    "F401",   # unused imports — too noisy during development
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["F811"]   # fixture redefinition in conftest is expected
