@@ -14,7 +14,13 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";   -- gen_random_uuid()
 -- Grant ALL so the analytics user (GoTrue's DB user) can run migrations.
 -- ──────────────────────────────────────────────
 CREATE SCHEMA IF NOT EXISTS auth;
-GRANT ALL ON SCHEMA auth TO analytics;
+-- Only grant if the analytics role exists (Docker Compose stack).
+-- In test environments the role is 'postgres' and this is a no-op.
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'analytics') THEN
+    GRANT ALL ON SCHEMA auth TO analytics;
+  END IF;
+END $$;
 
 -- ──────────────────────────────────────────────
 -- Organizations  (not tenant-scoped; public read for auth layer)
