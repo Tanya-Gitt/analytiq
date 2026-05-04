@@ -5,7 +5,7 @@
 <p><strong>The self-hostable product analytics platform you actually own.</strong><br/>
 Event tracking + e-commerce analytics in a single Docker Compose stack — no SaaS fees, no data leaving your servers.</p>
 
-[![CI](https://img.shields.io/github/actions/workflow/status/purusharth2021/analytiq/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/purusharth2021/analytiq/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/Tanya-Gitt/analytiq/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/Tanya-Gitt/analytiq/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12-3776ab?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js)](https://nextjs.org)
@@ -84,7 +84,7 @@ Browser / Client        │          nginx : 80              │
 ### 1 — Clone and configure
 
 ```bash
-git clone https://github.com/purusharth2021/analytiq.git
+git clone https://github.com/Tanya-Gitt/analytiq.git
 cd analytiq
 cp .env.example .env
 ```
