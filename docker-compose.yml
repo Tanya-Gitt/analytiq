@@ -89,9 +89,8 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: /api
     healthcheck:
-      # Use node (always present) — wget exits non-zero on 302 redirects.
-      # Accept any HTTP response < 500 as healthy.
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      # curl is installed in the runner stage — follows redirects, exits 0 on any 2xx/3xx.
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/"]
       interval: 15s
       timeout: 5s
       retries: 10
