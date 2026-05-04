@@ -8,6 +8,15 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";   -- gen_random_uuid()
 
 -- ──────────────────────────────────────────────
+-- Auth schema (required by Supabase GoTrue)
+-- GoTrue's 00_init_auth_schema migration creates tables inside the auth
+-- schema but does NOT create the schema itself — it must pre-exist.
+-- Grant ALL so the analytics user (GoTrue's DB user) can run migrations.
+-- ──────────────────────────────────────────────
+CREATE SCHEMA IF NOT EXISTS auth;
+GRANT ALL ON SCHEMA auth TO analytics;
+
+-- ──────────────────────────────────────────────
 -- Organizations  (not tenant-scoped; public read for auth layer)
 -- ──────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS orgs (
