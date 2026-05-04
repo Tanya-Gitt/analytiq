@@ -39,6 +39,7 @@ services:
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_DATABASE_URL: postgresql://analytics:${POSTGRES_PASSWORD}@postgres:5432/analytics
       GOTRUE_SITE_URL: http://localhost
+      API_EXTERNAL_URL: http://localhost          # required by GoTrue v2.143+
       GOTRUE_JWT_SECRET: ${JWT_SECRET}
       GOTRUE_JWT_EXP: 86400
       GOTRUE_API_HOST: 0.0.0.0
