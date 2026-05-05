@@ -6,7 +6,7 @@
 Event tracking + e-commerce analytics in a single Docker Compose stack — no SaaS fees, no data leaving your servers.</p>
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Tanya-Gitt/analytiq/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/Tanya-Gitt/analytiq/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12-3776ab?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js)](https://nextjs.org)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql&logoColor=white)](https://postgresql.org)
@@ -261,7 +261,7 @@ All three must pass green.
 
 ## 📄 License
 
-MIT — see [LICENSE](LICENSE).
+AGPL v3 — free for open-source use. Commercial use requires a license. See [LICENSE](LICENSE) or contact purusharth2021@gmail.com.
 
 ---
 
