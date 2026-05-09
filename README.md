@@ -31,15 +31,24 @@ Event tracking + e-commerce analytics in a single Docker Compose stack — no Sa
 
 ## ✨ Features
 
-- **Segment A — Event tracking** · browser JS SDK, HMAC-signed webhooks, CSV import, Google Sheets sync
-- **Segment B — E-commerce analytics** · orders, revenue trends, top channels, delivery rate
-- **Live dashboards** · revenue trend, events timeline, top products — with 7 / 30 / 90-day windows
-- **Smart alerting** · define metric thresholds → get Slack or email notifications with auto-resolve
-- **Multi-tenant by default** · Postgres RLS enforces org isolation at the DB layer — no application-level leakage possible
-- **Multiple ingestion paths** · push (webhook + JS SDK) and pull (CSV upload + Google Sheets polling)
-- **Background sync scheduler** · APScheduler polls connectors, evaluates alert rules, recovers orphaned runs
-- **Token-bucket rate limiting** · 100 req/s per org, backed by Postgres — survives restarts and horizontal scale
-- **258 tests, 0 mocks for DB** · every test runs against a real Postgres instance
+**Segment A — Event analytics**
+- Browser JS SDK with `identify`, `track`, and `page` calls
+- HMAC-signed webhooks and CSV import
+- Events timeline, top events, conversion funnel, new vs returning users chart
+- Per-event-type filtering with 7 / 30 / 90-day windows
+
+**Segment B — E-commerce analytics**
+- Revenue trend, AOV trend, top products, top channels (donut), revenue by region
+- Period-over-period comparison badges (vs previous window)
+- Per-channel filtering, delivery rate KPI
+- Orders via webhook, CSV upload, or Google Sheets polling
+
+**Platform**
+- Smart alerting — metric thresholds → Slack or email with auto-resolve
+- Multi-tenant by default — Postgres RLS enforces org isolation at the DB layer
+- Background sync scheduler — APScheduler polls connectors, evaluates alerts, recovers orphaned runs
+- Token-bucket rate limiting — 100 req/s per org, Postgres-backed, survives restarts
+- 258 tests, 0 mocks for DB — every test runs against a real Postgres instance
 
 ---
 
@@ -50,11 +59,12 @@ graph TD
     Client(["🌐 Browser / Client"])
 
     subgraph Docker Compose Stack
-        nginx["nginx :80\n──────────────────\n/api/*  →  FastAPI :8000\n/sdk/*  →  FastAPI :8000\n/*      →  Next.js :3000"]
+        nginx["nginx :80\n──────────────────\n/api/*    → FastAPI :8000\n/sdk/*    → FastAPI :8000\n/auth/*   → GoTrue  :9999\n/*        → Next.js :3000"]
 
         subgraph Backend
             api["⚡ FastAPI\nREST API · RLS auth · Rate limiting"]
             frontend["🖥️ Next.js\nDashboard UI · Recharts"]
+            auth["🔐 Supabase GoTrue\nJWT issuer :9999"]
         end
 
         db[("🐘 PostgreSQL :5432\nRow-Level Security\norgs · users · events · orders\nconnectors · alert_rules · sync_runs")]
@@ -65,11 +75,13 @@ graph TD
     Client --> nginx
     nginx --> api
     nginx --> frontend
+    nginx --> auth
     api --> db
+    auth --> db
     scheduler --> db
 ```
 
-**Six containers:** `postgres` · `app` (FastAPI) · `frontend` (Next.js) · `scheduler` · `nginx`
+**Six containers:** `postgres` · `app` (FastAPI) · `frontend` (Next.js) · `scheduler` · `auth` (GoTrue) · `nginx`
 
 ---
 
@@ -173,10 +185,17 @@ The alert FSM handles OK → TRIGGERED → OK transitions automatically and re-n
 | Concern | How it's handled |
 |---|---|
 | **Tenant isolation** | Postgres RLS + `SET LOCAL app.org_id` — enforced at DB layer, not app layer |
-| **Webhook authenticity** | HMAC-SHA256 signature verified with `hmac.compare_digest()` (timing-safe) |
-| **SQL injection via CSV headers** | `sanitize_column_name()` strips all non-`[a-zA-Z0-9_]` chars before DDL |
-| **JWT forgery** | HS256, configurable expiry, secret from env — never hardcoded |
-| **Rate limiting** | 100 req/s token bucket per org, Postgres-backed — survives restarts and scales horizontally |
+| **Auth brute force** | nginx rate-limits `/api/auth/login`, `/api/auth/signup`, `/auth/token` to 5 req/min per IP |
+| **Account lockout** | 10 consecutive failed logins locks the account for 15 minutes; constant-time bcrypt dummy hash prevents user enumeration |
+| **Webhook authenticity** | HMAC-SHA256 signature verified with `hmac.compare_digest()` (timing-safe); 1 MB payload cap |
+| **CSV upload** | 10 MB hard cap enforced before and after read; column names sanitized before DDL |
+| **SQL injection** | `sanitize_column_name()` strips all non-`[a-zA-Z0-9_]` chars before any DDL |
+| **JWT forgery** | HS256, 24-hour expiry, secret from env — never hardcoded |
+| **Clickjacking** | `X-Frame-Options: DENY` + CSP `frame-ancestors 'none'` |
+| **Content Security Policy** | Strict CSP on all responses — restricts scripts, styles, frames, and form targets |
+| **Supply chain** | All GitHub Actions pinned to SHA hashes, not mutable version tags |
+| **Container privilege** | Both `app` and `scheduler` run as non-root `appuser` (uid 1001) |
+| **Rate limiting (API)** | 100 req/s token bucket per org, Postgres-backed — survives restarts |
 
 > ⚠️ **Never call `pool.acquire()` directly in route handlers.** Always use `get_org_db` from `app/deps.py` — it sets `app.org_id` inside a transaction so RLS is enforced on every query.
 
@@ -222,6 +241,8 @@ analytiq/
 │   └── analytics.js      # Browser JS SDK (identify, track, page)
 ├── db/
 │   └── schema.sql        # PostgreSQL schema + RLS policies
+├── nginx/
+│   └── default.conf      # Reverse proxy + rate limiting + security headers
 ├── tests/                # 258 pytest tests — real Postgres, no DB mocks
 ├── docker-compose.yml    # Full 6-container stack
 └── .env.example          # Copy → .env, fill in 2 values, you're done
