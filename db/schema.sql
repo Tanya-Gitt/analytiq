@@ -257,6 +257,9 @@ DO $$ BEGIN
     CREATE ROLE app_role;
   END IF;
 END $$;
+-- Schema-level access (required before table grants can be used)
+GRANT USAGE ON SCHEMA public TO app_role;
+-- Data-level access — covers all tables created above in this file
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_role;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app_role;
 -- rate_limits is not RLS-protected but app_role still needs access (covered above,

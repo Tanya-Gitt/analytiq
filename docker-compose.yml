@@ -15,9 +15,12 @@ services:
       POSTGRES_DB: analytics
       POSTGRES_USER: analytics
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Used by 02_app_user.sh to create the least-privilege app_user login role
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/02_app_user.sh:/docker-entrypoint-initdb.d/02_app_user.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U analytics -d analytics"]
       interval: 5s
@@ -68,7 +71,10 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://analytics:${POSTGRES_PASSWORD}@postgres:5432/analytics
+      # app_user is a least-privilege role (member of app_role).
+      # It cannot bypass RLS, drop tables, or create roles.
+      # The analytics superuser is only used for schema init and GoTrue migrations.
+      DATABASE_URL: postgresql://app_user:${APP_DB_PASSWORD}@postgres:5432/analytics
       JWT_SECRET: ${JWT_SECRET}
       # Comma-separated origins allowed to call /api/* from a browser.
       # Add your production domain here, e.g. https://analytics.mycompany.com
@@ -106,7 +112,7 @@ services:
       app:
         condition: service_healthy   # ensures schema is applied before scheduler starts
     environment:
-      DATABASE_URL: postgresql://analytics:${POSTGRES_PASSWORD}@postgres:5432/analytics
+      DATABASE_URL: postgresql://app_user:${APP_DB_PASSWORD}@postgres:5432/analytics
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
