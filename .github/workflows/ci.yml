@@ -57,7 +57,7 @@ jobs:
             --cov-report=xml
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@65c4c4a1ddee5b14d0a8d1da2d4ffa9aabfe71a3  # v4.6.0
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         if: always()
         with:
           name: coverage-report
