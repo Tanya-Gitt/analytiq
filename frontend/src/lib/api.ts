@@ -72,10 +72,15 @@ export interface SegmentBDashboard {
   delivery_rate: number | null;
   total_orders: number;
   total_revenue: number;
+  prev_total_orders: number;
+  prev_total_revenue: number;
+  available_channels: string[];
 }
 
-export function getSegmentBDashboard(days = 30) {
-  return request<SegmentBDashboard>(`/dashboard/segment-b?days=${days}`);
+export function getSegmentBDashboard(days = 30, channel?: string) {
+  const params = new URLSearchParams({ days: String(days) });
+  if (channel) params.set('channel', channel);
+  return request<SegmentBDashboard>(`/dashboard/segment-b?${params}`);
 }
 
 // ── Dashboard — Segment A ─────────────────────────────────────────────────────
@@ -87,10 +92,14 @@ export interface SegmentADashboard {
   top_events: TopEvent[];
   dau: number | null;
   total_events: number;
+  prev_total_events: number;
+  available_event_types: string[];
 }
 
-export function getSegmentADashboard(days = 30) {
-  return request<SegmentADashboard>(`/dashboard/segment-a?days=${days}`);
+export function getSegmentADashboard(days = 30, eventType?: string) {
+  const params = new URLSearchParams({ days: String(days) });
+  if (eventType) params.set('event_type', eventType);
+  return request<SegmentADashboard>(`/dashboard/segment-a?${params}`);
 }
 
 // ── Connectors ────────────────────────────────────────────────────────────────

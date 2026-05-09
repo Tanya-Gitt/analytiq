@@ -1,8 +1,7 @@
 'use client';
 
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, Cell,
+  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import type { TopChannel } from '@/lib/api';
 
@@ -29,36 +28,33 @@ export default function TopChannelsChart({ data }: Props) {
 
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <BarChart
-        data={data}
-        layout="vertical"
-        margin={{ top: 4, right: 20, bottom: 0, left: 60 }}
-      >
-        <XAxis
-          type="number"
-          tick={{ fontSize: 11, fill: '#9ca3af' }}
-          tickLine={false}
-          axisLine={false}
-          tickFormatter={fmt}
-        />
-        <YAxis
-          type="category"
-          dataKey="channel"
-          tick={{ fontSize: 12, fill: '#374151' }}
-          tickLine={false}
-          axisLine={false}
-          width={55}
-        />
+      <PieChart>
+        <Pie
+          data={data}
+          dataKey="revenue"
+          nameKey="channel"
+          cx="50%"
+          cy="50%"
+          innerRadius={52}
+          outerRadius={80}
+          paddingAngle={3}
+        >
+          {data.map((_, i) => (
+            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+          ))}
+        </Pie>
         <Tooltip
           formatter={(v: number) => [fmt(v), 'Revenue']}
           contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
         />
-        <Bar dataKey="revenue" radius={[0, 4, 4, 0]}>
-          {data.map((_, i) => (
-            <Cell key={i} fill={COLORS[i % COLORS.length]} />
-          ))}
-        </Bar>
-      </BarChart>
+        <Legend
+          iconType="circle"
+          iconSize={8}
+          formatter={(value) => (
+            <span style={{ fontSize: 12, color: '#374151' }}>{value}</span>
+          )}
+        />
+      </PieChart>
     </ResponsiveContainer>
   );
 }
