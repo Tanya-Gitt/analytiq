@@ -17,6 +17,7 @@ from __future__ import annotations
 import base64
 import logging
 from typing import Any
+from urllib.parse import urlparse
 
 import asyncpg
 import httpx
@@ -242,6 +243,52 @@ async def sync_connector(
 
 # ── CSV fetch strategies ──────────────────────────────────────────────────────
 
+def _validate_sheets_url(url: str) -> None:
+    """
+    SECURITY: Prevent SSRF by validating that sheets_csv URLs are public HTTP(S) only.
+
+    Rejects:
+      - Non-http(s) schemes (file://, ftp://, etc.)
+      - Internal hostnames (localhost, *.internal, Docker service names like postgres/app/nginx)
+      - Private IP ranges (10.x, 172.16-31.x, 192.168.x, 127.x)
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        raise ValueError("Invalid URL format")
+
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"URL scheme {parsed.scheme!r} not allowed; use http or https")
+
+    host = (parsed.hostname or "").lower().strip(".")
+    if not host:
+        raise ValueError("URL has no hostname")
+
+    # Block loopback / localhost
+    if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        raise ValueError("URL hostname is not allowed (loopback address)")
+
+    # Block common Docker-internal service names
+    _BLOCKED_HOSTS = {"postgres", "app", "nginx", "auth", "scheduler", "frontend"}
+    if host in _BLOCKED_HOSTS:
+        raise ValueError(f"URL hostname {host!r} is not allowed (internal service name)")
+
+    # Block .local / .internal TLDs
+    if host.endswith((".local", ".internal", ".localdomain")):
+        raise ValueError(f"URL hostname {host!r} is not allowed (private TLD)")
+
+    # Block RFC-1918 private IP ranges
+    import ipaddress
+    try:
+        addr = ipaddress.ip_address(host)
+        if addr.is_private or addr.is_loopback or addr.is_link_local:
+            raise ValueError(f"URL hostname {host!r} resolves to a private IP range")
+    except ValueError as e:
+        if "private IP" in str(e) or "private range" in str(e) or "loopback" in str(e):
+            raise
+        # Not an IP address — that's fine, hostname validation above already ran
+
+
 async def _fetch_csv(connector_type: str, config: dict[str, Any]) -> bytes:
     """
     Return raw CSV bytes depending on connector type.
@@ -254,7 +301,10 @@ async def _fetch_csv(connector_type: str, config: dict[str, Any]) -> bytes:
         if not url:
             raise ValueError("sheets_csv connector missing config.url")
 
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+        # SECURITY: validate URL before fetching to prevent SSRF
+        _validate_sheets_url(url)
+
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
             resp = await client.get(url)
             if resp.status_code != 200:
                 raise ValueError(

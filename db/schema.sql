@@ -36,11 +36,13 @@ CREATE TABLE IF NOT EXISTS orgs (
 -- Users  (one user can belong to one org for MVP)
 -- ──────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id        UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
-  email         TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,      -- bcrypt
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id                 UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  email                  TEXT UNIQUE NOT NULL,
+  password_hash          TEXT NOT NULL,      -- bcrypt
+  failed_login_attempts  INT  NOT NULL DEFAULT 0,
+  locked_until           TIMESTAMPTZ,        -- NULL = not locked
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS users_org ON users(org_id);
 

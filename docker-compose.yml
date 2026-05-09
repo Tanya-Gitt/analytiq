@@ -23,8 +23,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    # SECURITY: Do NOT expose 5432 to 0.0.0.0 in production.
+    # For local development only — comment out or bind to 127.0.0.1.
+    # In production, remove this entirely; the app connects via internal Docker network.
     ports:
-      - "5432:5432"   # expose for local dev/migrations
+      - "127.0.0.1:5432:5432"   # local dev only — bound to loopback, not 0.0.0.0
 
   # ── Supabase GoTrue (auth) ────────────────────────────────────────────────
   auth:

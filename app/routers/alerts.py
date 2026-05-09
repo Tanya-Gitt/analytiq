@@ -6,6 +6,7 @@ DELETE /api/alerts/{id} — delete an alert rule.
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
 from uuid import UUID
 
 import asyncpg
@@ -22,6 +23,52 @@ _VALID_METRICS = {
 }
 _VALID_CONDITIONS = {"below", "above", "no_data"}
 _VALID_CHANNELS   = {"slack", "email"}
+
+# Private/internal hostname blocklist (SSRF prevention for Slack destinations)
+_BLOCKED_DESTINATION_HOSTS = {
+    "localhost", "127.0.0.1", "::1", "0.0.0.0",
+    "postgres", "app", "nginx", "auth", "scheduler", "frontend",
+}
+
+
+def _validate_destination(channel: str, destination: str) -> None:
+    """
+    SECURITY: Prevent SSRF via alert destinations.
+
+    - email: must look like an email address (contains @)
+    - slack: must be a public https:// URL, not an internal address
+    """
+    if channel == "email":
+        if "@" not in destination or len(destination) < 5:
+            raise HTTPException(422, "destination must be a valid email address")
+        return
+
+    if channel == "slack":
+        try:
+            parsed = urlparse(destination)
+        except Exception:
+            raise HTTPException(422, "destination is not a valid URL")
+
+        if parsed.scheme != "https":
+            raise HTTPException(422, "Slack destination must be an https:// URL")
+
+        host = (parsed.hostname or "").lower()
+        if not host:
+            raise HTTPException(422, "destination URL has no hostname")
+
+        if host in _BLOCKED_DESTINATION_HOSTS:
+            raise HTTPException(422, f"destination hostname {host!r} is not allowed")
+
+        if host.endswith((".local", ".internal")):
+            raise HTTPException(422, f"destination hostname {host!r} is not allowed")
+
+        import ipaddress
+        try:
+            addr = ipaddress.ip_address(host)
+            if addr.is_private or addr.is_loopback:
+                raise HTTPException(422, "destination must be a public URL")
+        except ValueError:
+            pass  # Not an IP — fine
 
 
 class AlertRuleCreate(BaseModel):
@@ -60,6 +107,8 @@ async def create_alert_rule(
         raise HTTPException(422, f"invalid channel: {body.channel!r}")
     if body.condition != "no_data" and body.threshold is None:
         raise HTTPException(422, "threshold required for 'below'/'above' conditions")
+    # SECURITY: validate destination to prevent SSRF
+    _validate_destination(body.channel, body.destination)
 
     row = await db.fetchrow(
         """

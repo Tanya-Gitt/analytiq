@@ -9,4 +9,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY scheduler/ ./scheduler/
 
+# SECURITY: run as non-root user — limits blast radius if RCE is ever exploited
+RUN addgroup --system --gid 1001 appgroup && \
+    adduser  --system --uid 1001 --ingroup appgroup appuser && \
+    chown -R appuser:appgroup /app
+USER appuser
+
 CMD ["python", "-m", "scheduler.main"]

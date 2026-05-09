@@ -4,18 +4,36 @@ Auth routes: signup, login, me.
 For MVP, this is simple email+password auth (bcrypt hash stored in users table).
 Supabase GoTrue handles the JWT signing with the same JWT_SECRET — tokens from
 GoTrue's /token endpoint are also accepted by app/auth.py's verify_jwt_get_org_id().
+
+Security notes:
+  - Login always runs bcrypt (even for unknown emails) to prevent timing-based
+    user enumeration. Uses a dummy hash for the constant-time check.
+  - Account lockout: 10 consecutive failures locks the account for 15 minutes.
+    Counter resets to 0 on successful login.
+  - Rate limiting at nginx level: 5 req/min per IP on /api/auth/login.
+  - Passwords must be ≥ 8 characters.
 """
 
 from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
 
 import asyncpg
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 from app.auth import create_access_token, verify_jwt_get_org_id
 from app.database import get_pool
+
+# Account lockout constants
+_MAX_FAILED_ATTEMPTS = 10
+_LOCKOUT_DURATION    = timedelta(minutes=15)
+
+# Pre-computed dummy hash used to run bcrypt for unknown emails
+# (prevents timing-based user enumeration: bcrypt always runs, same cost)
+_DUMMY_HASH = bcrypt.hashpw(b"dummy_constant_time_guard", bcrypt.gensalt(rounds=12)).decode()
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -26,6 +44,20 @@ class SignupRequest(BaseModel):
     org_name: str
     email: EmailStr
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("password must be at least 8 characters")
+        return v
+
+    @field_validator("org_name")
+    @classmethod
+    def org_name_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("org_name must not be blank")
+        return v.strip()
 
 
 class LoginRequest(BaseModel):
@@ -85,11 +117,25 @@ async def signup(body: SignupRequest, pool: asyncpg.Pool = Depends(get_pool)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, pool: asyncpg.Pool = Depends(get_pool)):
-    """Email + password login. Returns a JWT."""
+    """
+    Email + password login. Returns a JWT.
+
+    SECURITY:
+      - Always runs bcrypt.checkpw() regardless of whether the email exists
+        (prevents timing-based user enumeration).
+      - Locks the account for 15 minutes after 10 consecutive failed attempts.
+        Counter resets to 0 on successful login.
+    """
+    invalid = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="invalid email or password",
+    )
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT u.id, u.org_id, u.password_hash, o.api_key
+            SELECT u.id, u.org_id, u.password_hash, u.failed_login_attempts,
+                   u.locked_until, o.api_key
             FROM users u
             JOIN orgs o ON o.id = u.org_id
             WHERE u.email = $1
@@ -97,15 +143,44 @@ async def login(body: LoginRequest, pool: asyncpg.Pool = Depends(get_pool)):
             body.email,
         )
 
-    invalid = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="invalid email or password",
-    )
-    if row is None:
-        raise invalid
+        # Always run bcrypt to prevent timing-based user enumeration.
+        # If user not found, compare against a dummy hash (same cost, same time).
+        stored_hash = row["password_hash"].encode() if row else _DUMMY_HASH.encode()
+        password_ok = bcrypt.checkpw(body.password.encode(), stored_hash)
 
-    if not bcrypt.checkpw(body.password.encode(), row["password_hash"].encode()):
-        raise invalid
+        if row is None or not password_ok:
+            # Increment failure counter for known users (unknown users: no-op)
+            if row is not None:
+                await conn.execute(
+                    """
+                    UPDATE users
+                    SET failed_login_attempts = failed_login_attempts + 1,
+                        locked_until = CASE
+                            WHEN failed_login_attempts + 1 >= $2
+                            THEN NOW() + $3::interval
+                            ELSE locked_until
+                        END
+                    WHERE id = $1
+                    """,
+                    row["id"],
+                    _MAX_FAILED_ATTEMPTS,
+                    str(int(_LOCKOUT_DURATION.total_seconds())) + " seconds",
+                )
+            raise invalid
+
+        # Check lockout AFTER verifying password (same response for wrong pass + locked)
+        if row["locked_until"] and row["locked_until"] > datetime.now(tz=timezone.utc):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="account temporarily locked — too many failed attempts",
+                headers={"Retry-After": "900"},
+            )
+
+        # Successful login — reset failure counter
+        await conn.execute(
+            "UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1",
+            row["id"],
+        )
 
     token = create_access_token(
         user_id=str(row["id"]), org_id=str(row["org_id"])

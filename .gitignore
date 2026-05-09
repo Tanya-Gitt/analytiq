@@ -36,5 +36,11 @@ Thumbs.db
 # Tool outputs (not part of the project)
 graphify-out/
 
+# gstack local artifacts (security reports — stay local, never commit)
+.gstack/
+
+# Seed scripts (dev only)
+seed_rich.py
+
 # TypeScript incremental build info
 *.tsbuildinfo

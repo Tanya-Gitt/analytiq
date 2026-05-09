@@ -5,8 +5,13 @@ import useSWR from 'swr';
 import AppShell from '@/components/layout/AppShell';
 import RevenueChart from '@/components/charts/RevenueChart';
 import TopChannelsChart from '@/components/charts/TopChannelsChart';
+import TopProductsChart from '@/components/charts/TopProductsChart';
+import AovTrendChart from '@/components/charts/AovTrendChart';
+import RevenueByRegionChart from '@/components/charts/RevenueByRegionChart';
 import EventsChart from '@/components/charts/EventsChart';
 import TopEventsChart from '@/components/charts/TopEventsChart';
+import FunnelChart from '@/components/charts/FunnelChart';
+import NewVsReturningChart from '@/components/charts/NewVsReturningChart';
 import { getSegmentBDashboard, getSegmentADashboard } from '@/lib/api';
 
 const DAYS_OPTIONS = [7, 14, 30, 90];
@@ -148,7 +153,7 @@ function SegmentBDashboard({ days }: { days: number }) {
         <StatCard label="Delivery Rate" value={pct(data.delivery_rate)} />
       </div>
 
-      {/* Charts */}
+      {/* Charts row 1 */}
       <div className="grid grid-cols-2 gap-6">
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Revenue trend</h3>
@@ -158,6 +163,24 @@ function SegmentBDashboard({ days }: { days: number }) {
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Revenue by channel</h3>
           <TopChannelsChart data={data.top_channels} />
         </div>
+      </div>
+
+      {/* Charts row 2 */}
+      <div className="grid grid-cols-2 gap-6">
+        <div className="card">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Top products</h3>
+          <TopProductsChart data={data.top_products} />
+        </div>
+        <div className="card">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Revenue by region</h3>
+          <RevenueByRegionChart data={data.revenue_by_region} />
+        </div>
+      </div>
+
+      {/* Charts row 3 */}
+      <div className="card">
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">Average order value trend</h3>
+        <AovTrendChart data={data.aov_trend} />
       </div>
     </div>
   );
@@ -217,7 +240,7 @@ function SegmentADashboard({ days }: { days: number }) {
         />
       </div>
 
-      {/* Charts */}
+      {/* Charts row 1 */}
       <div className="grid grid-cols-2 gap-6">
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Events over time</h3>
@@ -226,6 +249,18 @@ function SegmentADashboard({ days }: { days: number }) {
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Top events</h3>
           <TopEventsChart data={data.top_events} />
+        </div>
+      </div>
+
+      {/* Charts row 2 */}
+      <div className="grid grid-cols-2 gap-6">
+        <div className="card">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Conversion funnel</h3>
+          <FunnelChart data={data.funnel} />
+        </div>
+        <div className="card">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">New vs returning users</h3>
+          <NewVsReturningChart data={data.new_vs_returning} />
         </div>
       </div>
     </div>

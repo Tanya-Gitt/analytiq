@@ -122,6 +122,28 @@ async def _check_cors(request: Request, conn: asyncpg.Connection, org_id: str) -
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
+_MAX_STRING_LEN  = 512     # max chars for string scalar fields
+_MAX_PROPERTIES  = 50      # max number of keys in properties
+_MAX_PROP_DEPTH  = 3       # max JSON nesting depth
+_MAX_PROP_VALUE  = 4096    # max chars per property value string
+
+
+def _validate_properties(props: dict[str, Any], depth: int = 0) -> None:
+    """
+    Reject payloads that could cause DB bloat or parser bombs.
+    Raises ValueError on violation.
+    """
+    if depth > _MAX_PROP_DEPTH:
+        raise ValueError(f"properties nesting too deep (max {_MAX_PROP_DEPTH} levels)")
+    if len(props) > _MAX_PROPERTIES:
+        raise ValueError(f"too many property keys (max {_MAX_PROPERTIES})")
+    for k, v in props.items():
+        if isinstance(v, str) and len(v) > _MAX_PROP_VALUE:
+            raise ValueError(f"property {k!r} value exceeds {_MAX_PROP_VALUE} chars")
+        if isinstance(v, dict):
+            _validate_properties(v, depth + 1)
+
+
 class EventPayload(BaseModel):
     type: str                          # 'track' | 'identify' | 'page'
     event: str | None = None           # required for type='track'
@@ -167,6 +189,12 @@ async def ingest_event(
 
     if body.type == "track" and not body.event:
         raise HTTPException(status_code=400, detail="event field required for type='track'")
+
+    # Validate properties size to prevent DB bloat and parser bombs
+    try:
+        _validate_properties(body.properties)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     event_name = body.event or body.type
 

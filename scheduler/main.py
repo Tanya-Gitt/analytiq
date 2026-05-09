@@ -28,6 +28,7 @@ import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.connectors.sync import sync_connector
+from app.database import _init_connection  # JSONB codec registration
 
 from .alert_evaluator import evaluate_alerts
 
@@ -160,7 +161,12 @@ async def run_scheduler() -> None:  # pragma: no cover
     # asyncpg requires postgresql:// scheme (not postgres://)
     dsn = database_url.replace("postgres://", "postgresql://", 1)
 
-    pool = await asyncpg.create_pool(dsn=dsn, min_size=2, max_size=10)
+    pool = await asyncpg.create_pool(
+        dsn=dsn,
+        min_size=2,
+        max_size=10,
+        init=_init_connection,  # registers JSONB codec so config comes back as dict not string
+    )
     logger.info("Database pool created")
 
     # Orphan recovery before the first poll

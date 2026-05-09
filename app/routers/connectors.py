@@ -221,10 +221,18 @@ async def upload_csv(
             detail=f"connector type is {row['type']!r}; only csv_upload supports file upload",
         )
 
+    # Guard against memory bombs before reading the whole file.
+    # nginx allows 12 MB bodies; we cap at 10 MB here in app code as a second layer.
+    _MAX_CSV_BYTES = 10 * 1024 * 1024  # 10 MB
+    if file.size is not None and file.size > _MAX_CSV_BYTES:
+        raise HTTPException(status_code=413, detail="CSV file too large (max 10 MB)")
+
     # Read and base64-encode the uploaded file
     csv_bytes = await file.read()
     if not csv_bytes:
         raise HTTPException(status_code=422, detail="uploaded file is empty")
+    if len(csv_bytes) > _MAX_CSV_BYTES:
+        raise HTTPException(status_code=413, detail="CSV file too large (max 10 MB)")
 
     b64 = base64.b64encode(csv_bytes).decode()
 

@@ -87,7 +87,12 @@ async def webhook_ingest(
     config: dict = connector["config"] or {}
 
     # ── 2. verify HMAC ─────────────────────────────────────────────────────
+    # Cap payload before reading to prevent memory exhaustion.
+    # 1 MB is more than enough for any realistic batch of orders.
+    _MAX_PAYLOAD = 1 * 1024 * 1024  # 1 MB
     body_bytes = await request.body()
+    if len(body_bytes) > _MAX_PAYLOAD:
+        raise HTTPException(status_code=413, detail="payload too large (max 1 MB)")
     secret: str = config.get("secret", "")
     header_value: str = request.headers.get("x-webhook-signature", "")
     _verify_hmac(body_bytes, secret, header_value)

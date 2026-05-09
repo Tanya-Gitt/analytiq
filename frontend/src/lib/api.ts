@@ -25,6 +25,15 @@ async function request<T>(
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const msg = body?.detail ?? `HTTP ${res.status}`;
+    // Auto-redirect to login on 401 (expired/invalid token)
+    // This prevents the "invalid or expired token" error from showing on the dashboard.
+    if (res.status === 401 && typeof window !== 'undefined') {
+      // Clear stale auth data and redirect to login
+      localStorage.removeItem('analytics_jwt');
+      localStorage.removeItem('analytics_api_key');
+      localStorage.removeItem('analytics_org_id');
+      window.location.replace('/login');
+    }
     throw new ApiError(res.status, msg);
   }
 
@@ -66,9 +75,15 @@ export function login(email: string, password: string) {
 
 export interface RevenueTrendPoint { date: string; revenue: number }
 export interface TopChannel { channel: string; revenue: number }
+export interface TopProduct { product_name: string; revenue: number; units_sold: number }
+export interface AovTrendPoint { date: string; aov: number }
+export interface RevenueByRegion { region: string; revenue: number }
 export interface SegmentBDashboard {
   revenue_trend: RevenueTrendPoint[];
   top_channels: TopChannel[];
+  top_products: TopProduct[];
+  aov_trend: AovTrendPoint[];
+  revenue_by_region: RevenueByRegion[];
   delivery_rate: number | null;
   total_orders: number;
   total_revenue: number;
@@ -87,9 +102,13 @@ export function getSegmentBDashboard(days = 30, channel?: string) {
 
 export interface EventsTimelinePoint { date: string; count: number }
 export interface TopEvent { event_name: string; count: number }
+export interface FunnelStep { step: string; users: number }
+export interface NewVsReturningPoint { date: string; new_users: number; returning_users: number }
 export interface SegmentADashboard {
   events_timeline: EventsTimelinePoint[];
   top_events: TopEvent[];
+  funnel: FunnelStep[];
+  new_vs_returning: NewVsReturningPoint[];
   dau: number | null;
   total_events: number;
   prev_total_events: number;

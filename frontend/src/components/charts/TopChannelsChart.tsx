@@ -5,7 +5,17 @@ import {
 } from 'recharts';
 import type { TopChannel } from '@/lib/api';
 
-const COLORS = ['#6366f1', '#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe'];
+// Perceptually distinct colors — each channel reads at a glance
+const COLORS: Record<string, string> = {
+  organic:     '#6366f1', // indigo
+  paid_search: '#f59e0b', // amber
+  email:       '#10b981', // emerald
+  social:      '#ef4444', // red
+  referral:    '#3b82f6', // blue
+  direct:      '#8b5cf6', // violet
+  paid_ads:    '#f97316', // orange
+};
+const FALLBACK_COLORS = ['#14b8a6', '#ec4899', '#84cc16', '#06b6d4', '#a855f7'];
 
 interface Props {
   data: TopChannel[];
@@ -39,8 +49,8 @@ export default function TopChannelsChart({ data }: Props) {
           outerRadius={80}
           paddingAngle={3}
         >
-          {data.map((_, i) => (
-            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+          {data.map((entry, i) => (
+            <Cell key={i} fill={COLORS[entry.channel] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length]} />
           ))}
         </Pie>
         <Tooltip

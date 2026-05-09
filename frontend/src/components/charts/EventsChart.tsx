@@ -40,7 +40,7 @@ export default function EventsChart({ data }: Props) {
           formatter={(v: number) => [v.toLocaleString(), 'Events']}
           contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
         />
-        <Bar dataKey="count" fill="#6366f1" radius={[3, 3, 0, 0]} />
+        <Bar dataKey="count" fill="#6366f1" radius={[3, 3, 0, 0]} maxBarSize={40} />
       </BarChart>
     </ResponsiveContainer>
   );

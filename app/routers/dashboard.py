@@ -155,9 +155,59 @@ async def dashboard_segment_b(
         """
     )
 
+    # Top products by revenue
+    top_products = await db.fetch(
+        f"""
+        SELECT product_name,
+               COALESCE(SUM(quantity * price_per_unit), 0)::float AS revenue,
+               SUM(quantity)::int                                  AS units_sold
+        FROM   orders
+        WHERE  product_name IS NOT NULL
+          AND  order_date >= CURRENT_DATE - ($1 || ' days')::interval
+          {ch_filter}
+        GROUP  BY product_name
+        ORDER  BY revenue DESC
+        LIMIT  8
+        """,
+        *params_trend,
+    )
+
+    # AOV trend (average order value per day)
+    aov_trend = await db.fetch(
+        f"""
+        SELECT order_date::text AS date,
+               AVG(quantity * price_per_unit)::float AS aov
+        FROM   orders
+        WHERE  order_date >= CURRENT_DATE - ($1 || ' days')::interval
+          {ch_filter}
+        GROUP  BY order_date
+        ORDER  BY order_date
+        """,
+        *params_trend,
+    )
+
+    # Revenue by region
+    revenue_by_region = await db.fetch(
+        f"""
+        SELECT region,
+               COALESCE(SUM(quantity * price_per_unit), 0)::float AS revenue
+        FROM   orders
+        WHERE  region IS NOT NULL
+          AND  order_date >= CURRENT_DATE - ($1 || ' days')::interval
+          {ch_filter}
+        GROUP  BY region
+        ORDER  BY revenue DESC
+        LIMIT  8
+        """,
+        *params_trend,
+    )
+
     result = {
         "revenue_trend":       [dict(r) for r in revenue_trend],
         "top_channels":        [dict(r) for r in top_channels],
+        "top_products":        [dict(r) for r in top_products],
+        "aov_trend":           [dict(r) for r in aov_trend],
+        "revenue_by_region":   [dict(r) for r in revenue_by_region],
         "delivery_rate":       delivery_rate,
         "total_orders":        totals["total_orders"],
         "total_revenue":       totals["total_revenue"],
@@ -270,9 +320,55 @@ async def dashboard_segment_a(
         """
     )
 
+    # Conversion funnel — counts for standard funnel steps (if data exists)
+    funnel_steps = ["page_view", "product_viewed", "add_to_cart", "checkout_started", "purchase_completed"]
+    funnel_rows = await db.fetch(
+        """
+        SELECT event_name, COUNT(DISTINCT user_id)::int AS users
+        FROM   events
+        WHERE  received_at  >= NOW() - ($1 || ' days')::interval
+          AND  user_id IS NOT NULL
+          AND  event_name = ANY($2::text[])
+        GROUP  BY event_name
+        """,
+        str(days),
+        funnel_steps,
+    )
+    # Build ordered funnel preserving step order, fill 0 for missing steps
+    funnel_map = {r["event_name"]: r["users"] for r in funnel_rows}
+    funnel = [
+        {"step": step, "users": funnel_map.get(step, 0)}
+        for step in funnel_steps
+    ]
+
+    # New vs returning users per day
+    new_vs_returning = await db.fetch(
+        f"""
+        SELECT
+            DATE(received_at)::text AS date,
+            COUNT(DISTINCT CASE WHEN first_seen = DATE(received_at) THEN user_id END)::int AS new_users,
+            COUNT(DISTINCT CASE WHEN first_seen < DATE(received_at)  THEN user_id END)::int AS returning_users
+        FROM (
+            SELECT user_id,
+                   DATE(received_at) AS day,
+                   received_at,
+                   MIN(DATE(received_at)) OVER (PARTITION BY user_id) AS first_seen
+            FROM   events
+            WHERE  received_at >= NOW() - ($1 || ' days')::interval
+              AND  user_id IS NOT NULL
+              {et_filter}
+        ) sub
+        GROUP  BY DATE(received_at)
+        ORDER  BY date
+        """,
+        *params,
+    )
+
     result = {
         "events_timeline":      [dict(r) for r in events_timeline],
         "top_events":           [dict(r) for r in top_events],
+        "funnel":               funnel,
+        "new_vs_returning":     [dict(r) for r in new_vs_returning],
         "dau":                  dau,
         "total_events":         total_events,
         "prev_total_events":    prev_total_events,
