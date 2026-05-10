@@ -12,9 +12,9 @@ import EventsChart from '@/components/charts/EventsChart';
 import TopEventsChart from '@/components/charts/TopEventsChart';
 import FunnelChart from '@/components/charts/FunnelChart';
 import NewVsReturningChart from '@/components/charts/NewVsReturningChart';
-import { getSegmentBDashboard, getSegmentADashboard } from '@/lib/api';
+import { getSegmentBDashboard, getSegmentADashboard, downloadExport, ApiError } from '@/lib/api';
 
-const DAYS_OPTIONS = [7, 14, 30, 90];
+const DAYS_OPTIONS = [7, 14, 30, 90, 180, 365];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -96,6 +96,56 @@ function FilterSelect({
   );
 }
 
+// ── Export button ─────────────────────────────────────────────────────────────
+
+function ExportButton({
+  segment,
+  days,
+  filter,
+}: {
+  segment: 'segment-a' | 'segment-b';
+  days: number;
+  filter?: { channel?: string; event_type?: string };
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState('');
+
+  async function handleExport() {
+    setLoading(true);
+    setError('');
+    try {
+      await downloadExport(segment, days, filter);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Export failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={handleExport}
+        disabled={loading}
+        className="flex items-center gap-1.5 text-xs font-medium text-gray-600
+                   border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50
+                   disabled:opacity-50 transition-colors"
+        title="Download as CSV"
+      >
+        {loading ? (
+          <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+        )}
+        Export CSV
+      </button>
+      {error && <span className="text-xs text-red-500">{error}</span>}
+    </div>
+  );
+}
+
 // ── Segment B ─────────────────────────────────────────────────────────────────
 
 function SegmentBDashboard({ days }: { days: number }) {
@@ -116,26 +166,35 @@ function SegmentBDashboard({ days }: { days: number }) {
 
   return (
     <div className="space-y-6">
-      {/* Filters */}
-      {data.available_channels.length > 0 && (
+      {/* Filters + Export */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Filter:</span>
-          <FilterSelect
-            label="All channels"
-            value={channel}
-            options={data.available_channels}
-            onChange={setChannel}
-          />
-          {channel && (
-            <button
-              onClick={() => setChannel('')}
-              className="text-xs text-brand-600 hover:underline"
-            >
-              Clear
-            </button>
+          {data.available_channels.length > 0 && (
+            <>
+              <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Filter:</span>
+              <FilterSelect
+                label="All channels"
+                value={channel}
+                options={data.available_channels}
+                onChange={setChannel}
+              />
+              {channel && (
+                <button
+                  onClick={() => setChannel('')}
+                  className="text-xs text-brand-600 hover:underline"
+                >
+                  Clear
+                </button>
+              )}
+            </>
           )}
         </div>
-      )}
+        <ExportButton
+          segment="segment-b"
+          days={days}
+          filter={channel ? { channel } : undefined}
+        />
+      </div>
 
       {/* KPI row */}
       <div className="grid grid-cols-3 gap-4">
@@ -205,26 +264,35 @@ function SegmentADashboard({ days }: { days: number }) {
 
   return (
     <div className="space-y-6">
-      {/* Filters */}
-      {data.available_event_types.length > 0 && (
+      {/* Filters + Export */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Filter:</span>
-          <FilterSelect
-            label="All event types"
-            value={eventType}
-            options={data.available_event_types}
-            onChange={setEventType}
-          />
-          {eventType && (
-            <button
-              onClick={() => setEventType('')}
-              className="text-xs text-brand-600 hover:underline"
-            >
-              Clear
-            </button>
+          {data.available_event_types.length > 0 && (
+            <>
+              <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Filter:</span>
+              <FilterSelect
+                label="All event types"
+                value={eventType}
+                options={data.available_event_types}
+                onChange={setEventType}
+              />
+              {eventType && (
+                <button
+                  onClick={() => setEventType('')}
+                  className="text-xs text-brand-600 hover:underline"
+                >
+                  Clear
+                </button>
+              )}
+            </>
           )}
         </div>
-      )}
+        <ExportButton
+          segment="segment-a"
+          days={days}
+          filter={eventType ? { event_type: eventType } : undefined}
+        />
+      </div>
 
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-4">
@@ -300,6 +368,17 @@ type Segment = 'B' | 'A';
 export default function DashboardPage() {
   const [segment, setSegment] = useState<Segment>('B');
   const [days, setDays] = useState(30);
+  const [customDays, setCustomDays] = useState('');
+  const [showCustom, setShowCustom] = useState(false);
+
+  function applyCustomDays() {
+    const n = parseInt(customDays, 10);
+    if (n >= 1 && n <= 365) {
+      setDays(n);
+      setShowCustom(false);
+      setCustomDays('');
+    }
+  }
 
   return (
     <AppShell>
@@ -331,15 +410,56 @@ export default function DashboardPage() {
           </div>
 
           {/* Days picker */}
-          <select
-            value={days}
-            onChange={e => setDays(Number(e.target.value))}
-            className="input w-auto text-sm py-1.5"
-          >
-            {DAYS_OPTIONS.map(d => (
-              <option key={d} value={d}>Last {d} days</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <select
+              value={DAYS_OPTIONS.includes(days) ? days : 'custom'}
+              onChange={e => {
+                if (e.target.value === 'custom') {
+                  setShowCustom(true);
+                } else {
+                  setDays(Number(e.target.value));
+                  setShowCustom(false);
+                }
+              }}
+              className="input w-auto text-sm py-1.5"
+            >
+              {DAYS_OPTIONS.map(d => (
+                <option key={d} value={d}>Last {d} days</option>
+              ))}
+              {!DAYS_OPTIONS.includes(days) && (
+                <option value="custom">Last {days} days</option>
+              )}
+              <option value="custom">Custom…</option>
+            </select>
+
+            {showCustom && (
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={customDays}
+                  onChange={e => setCustomDays(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && applyCustomDays()}
+                  placeholder="days"
+                  className="input w-20 text-sm py-1.5"
+                  autoFocus
+                />
+                <button
+                  onClick={applyCustomDays}
+                  className="btn-primary text-xs px-2 py-1.5"
+                >
+                  Go
+                </button>
+                <button
+                  onClick={() => setShowCustom(false)}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

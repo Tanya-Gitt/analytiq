@@ -246,3 +246,70 @@ export function createAlertRule(payload: {
 export function deleteAlertRule(id: string) {
   return request<void>(`/alerts/${id}`, { method: 'DELETE' });
 }
+
+// ── Auth: settings ────────────────────────────────────────────────────────────
+
+export interface MeResponse {
+  user_id: string;
+  email: string;
+  org_name: string;
+  api_key: string;
+}
+
+export function getMe() {
+  return request<MeResponse>('/auth/me');
+}
+
+export function rotateApiKey() {
+  return request<{ api_key: string }>('/auth/rotate-api-key', { method: 'POST' });
+}
+
+// ── Connectors: update ────────────────────────────────────────────────────────
+
+export function updateConnector(
+  connectorId: string,
+  patch: { name?: string; sync_interval_minutes?: number; status?: string },
+) {
+  return request<Connector>(`/connectors/${connectorId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+
+/**
+ * Trigger a CSV export download by creating a hidden <a> element.
+ * The Authorization header cannot be set on a plain browser download, so we
+ * fetch it via XHR and create an object URL instead.
+ */
+export async function downloadExport(
+  segment: 'segment-a' | 'segment-b',
+  days: number,
+  filter?: { channel?: string; event_type?: string },
+): Promise<void> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (filter?.channel)    params.set('channel',    filter.channel);
+  if (filter?.event_type) params.set('event_type', filter.event_type);
+
+  const res = await fetch(`${BASE}/export/${segment}?${params}`, {
+    headers: authHeader(),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body?.detail ?? `HTTP ${res.status}`);
+  }
+
+  const blob = await res.blob();
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const cd   = res.headers.get('content-disposition') ?? '';
+  const name = cd.match(/filename="([^"]+)"/)?.[1] ?? `${segment}_${days}d.csv`;
+  a.href     = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

@@ -1,6 +1,7 @@
 """
 POST   /api/connectors                        — create a connector (with setup-time validation).
 GET    /api/connectors                        — list connectors for the authenticated org.
+PATCH  /api/connectors/{id}                  — update name, config, sync_interval_minutes, or status.
 DELETE /api/connectors/{id}                  — permanently delete a connector and its sync history.
 POST   /api/connectors/{id}/sync             — manually trigger an immediate sync.
 POST   /api/connectors/{id}/upload-csv        — upload a CSV file for a csv_upload connector
@@ -134,6 +135,69 @@ async def list_connectors(db: asyncpg.Connection = Depends(get_org_db)):
         """
     )
     return [dict(r) for r in rows]
+
+
+class UpdateConnectorBody(BaseModel):
+    name: str | None = None
+    sync_interval_minutes: int | None = None
+    status: str | None = None
+    config: dict | None = None
+
+
+@router.patch("/connectors/{connector_id}")
+async def update_connector(
+    connector_id: UUID,
+    body: UpdateConnectorBody,
+    db: asyncpg.Connection = Depends(get_org_db),
+):
+    """
+    Partially update a connector's mutable fields.
+
+    Allowed fields: name, sync_interval_minutes, status, config.
+    Returns the full updated connector row.
+    RLS ensures only the owning org can update its connectors.
+    """
+    # Build SET clause dynamically — only update provided fields
+    updates: dict[str, Any] = {}
+    if body.name is not None:
+        updates["name"] = body.name
+    if body.sync_interval_minutes is not None:
+        if body.sync_interval_minutes < 1:
+            raise HTTPException(status_code=422, detail="sync_interval_minutes must be ≥ 1")
+        updates["sync_interval_minutes"] = body.sync_interval_minutes
+    if body.status is not None:
+        if body.status not in ("active", "paused", "error"):
+            raise HTTPException(status_code=422, detail="status must be active, paused, or error")
+        updates["status"] = body.status
+    if body.config is not None:
+        updates["config"] = body.config
+
+    if not updates:
+        raise HTTPException(status_code=422, detail="no fields to update")
+
+    # Build parameterised SET clause
+    set_parts = []
+    values: list[Any] = []
+    for i, (col, val) in enumerate(updates.items(), start=1):
+        set_parts.append(f"{col} = ${i}")
+        values.append(val)
+
+    values.append(connector_id)
+    id_param = f"${len(values)}"
+
+    row = await db.fetchrow(
+        f"""
+        UPDATE connectors
+        SET {', '.join(set_parts)}
+        WHERE id = {id_param}
+        RETURNING id, name, type, segment, status, sync_interval_minutes,
+                  last_synced_at, last_error, created_at
+        """,
+        *values,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="connector not found")
+    return dict(row)
 
 
 @router.post("/connectors/{connector_id}/sync", status_code=202)

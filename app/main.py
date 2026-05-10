@@ -28,6 +28,7 @@ from app.routers import alerts as alerts_router
 from app.routers import auth as auth_router
 from app.routers import connectors as connectors_router
 from app.routers import dashboard as dashboard_router
+from app.routers import export as export_router
 from app.routers import ingest as ingest_router
 from app.routers import webhook as webhook_router
 
@@ -69,6 +70,7 @@ app.include_router(ingest_router.router,     prefix="/api",      tags=["ingest"]
 app.include_router(webhook_router.router,    prefix="/api",      tags=["webhook"])
 app.include_router(connectors_router.router, prefix="/api",      tags=["connectors"])
 app.include_router(dashboard_router.router,  prefix="/api",      tags=["dashboard"])
+app.include_router(export_router.router,     prefix="/api",      tags=["export"])
 app.include_router(alerts_router.router,     prefix="/api",      tags=["alerts"])
 
 # ── Static: JS SDK ────────────────────────────────────────────────────────────
