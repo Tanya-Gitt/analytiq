@@ -222,3 +222,37 @@ async def me(
         "org_name": row["org_name"],
         "api_key":  row["api_key"],
     }
+
+
+@router.post("/rotate-api-key")
+async def rotate_api_key(
+    pool: asyncpg.Pool = Depends(get_pool),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+):
+    """
+    Rotate the org's API key.
+
+    Generates a new cryptographically random 48-character hex key using
+    Postgres's gen_random_bytes(24). The old key is immediately invalidated —
+    any JS SDK integrations or webhook senders using the old key must be updated.
+
+    Returns the new api_key.
+    """
+    if credentials is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="not authenticated")
+    org_id = verify_jwt_get_org_id(credentials.credentials)
+    async with pool.acquire() as conn:
+        new_key = await conn.fetchval(
+            """
+            UPDATE orgs
+            SET    api_key = encode(gen_random_bytes(24), 'hex')
+            WHERE  id = $1
+            RETURNING api_key
+            """,
+            org_id,
+        )
+    if new_key is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="org not found")
+    return {"api_key": new_key}

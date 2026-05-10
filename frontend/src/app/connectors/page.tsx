@@ -5,7 +5,7 @@ import useSWR, { mutate } from 'swr';
 import AppShell from '@/components/layout/AppShell';
 import {
   listConnectors, createConnector, deleteConnector, getSyncRuns, uploadCsv, triggerSync,
-  Connector, SyncRun, ApiError,
+  updateConnector, Connector, SyncRun, ApiError,
 } from '@/lib/api';
 import clsx from 'clsx';
 
@@ -204,13 +204,33 @@ function SyncRunsPanel({ connector }: { connector: Connector }) {
 
 // ── Connector card ────────────────────────────────────────────────────────────
 
-function ConnectorCard({ connector, onDeleted }: { connector: Connector; onDeleted: () => void }) {
+function ConnectorCard({ connector, onDeleted, onUpdated }: { connector: Connector; onDeleted: () => void; onUpdated: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync interval editing
+  const [editingInterval, setEditingInterval] = useState(false);
+  const [intervalVal, setIntervalVal] = useState(String(connector.sync_interval_minutes));
+  const [savingInterval, setSavingInterval] = useState(false);
+
+  async function handleSaveInterval() {
+    const n = parseInt(intervalVal, 10);
+    if (!n || n < 1) return;
+    setSavingInterval(true);
+    try {
+      await updateConnector(connector.id, { sync_interval_minutes: n });
+      onUpdated();
+      setEditingInterval(false);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setSavingInterval(false);
+    }
+  }
 
   async function handleSyncNow() {
     setSyncing(true);
@@ -280,6 +300,49 @@ function ConnectorCard({ connector, onDeleted }: { connector: Connector; onDelet
             <p className="text-xs text-red-500 mt-0.5 truncate max-w-sm" title={connector.last_error}>
               Error: {connector.last_error}
             </p>
+          )}
+          {/* Sync interval — only relevant for poll-based connectors */}
+          {['sheets_csv', 'csv_upload'].includes(connector.type) && (
+            <div className="flex items-center gap-1 mt-1">
+              <span className="text-xs text-gray-400">Sync every</span>
+              {editingInterval ? (
+                <>
+                  <input
+                    type="number"
+                    min={1}
+                    value={intervalVal}
+                    onChange={e => setIntervalVal(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSaveInterval()}
+                    className="input w-16 text-xs py-0.5 px-1"
+                    autoFocus
+                  />
+                  <span className="text-xs text-gray-400">min</span>
+                  <button
+                    onClick={handleSaveInterval}
+                    disabled={savingInterval}
+                    className="text-xs text-brand-600 hover:underline disabled:opacity-50 ml-1"
+                  >
+                    {savingInterval ? '…' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => { setEditingInterval(false); setIntervalVal(String(connector.sync_interval_minutes)); }}
+                    className="text-xs text-gray-400 hover:text-gray-600"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-xs font-medium text-gray-700">{connector.sync_interval_minutes} min</span>
+                  <button
+                    onClick={() => setEditingInterval(true)}
+                    className="text-xs text-brand-600 hover:underline ml-1"
+                  >
+                    Edit
+                  </button>
+                </>
+              )}
+            </div>
           )}
         </div>
 
@@ -384,7 +447,14 @@ export default function ConnectorsPage() {
       )}
 
       <div className="space-y-3">
-        {data?.map(c => <ConnectorCard key={c.id} connector={c} onDeleted={() => revalidate()} />)}
+        {data?.map(c => (
+          <ConnectorCard
+            key={c.id}
+            connector={c}
+            onDeleted={() => revalidate()}
+            onUpdated={() => revalidate()}
+          />
+        ))}
       </div>
     </AppShell>
   );

@@ -180,14 +180,15 @@ class TestLogin:
             json={
                 "org_name": "Same Org",
                 "email": "sameorg@example.com",
-                "password": "pass",
+                "password": "password123",
             },
         )
+        assert signup.status_code == 201, signup.text
         signup_org_id = signup.json()["org_id"]
 
         login = await client.post(
             "/api/auth/login",
-            json={"email": "sameorg@example.com", "password": "pass"},
+            json={"email": "sameorg@example.com", "password": "password123"},
         )
         assert login.json()["org_id"] == signup_org_id
 
