@@ -276,18 +276,42 @@ async def _fetch_segment_a_data(
     )
 
     funnel_steps = ["page_view", "product_viewed", "add_to_cart", "checkout_started", "purchase_completed"]
-    funnel_rows = await db.fetch(
-        """
-        SELECT event_name, COUNT(DISTINCT user_id)::int AS users
-        FROM   events
-        WHERE  received_at  >= NOW() - ($1 || ' days')::interval
-          AND  user_id IS NOT NULL
-          AND  event_name = ANY($2::text[])
-        GROUP  BY event_name
-        """,
-        str(days),
-        funnel_steps,
-    )
+    # When an event_type filter is active, scope the funnel to users who
+    # performed that event — so you can ask e.g. "of users who added to cart,
+    # how many reached checkout / completed purchase?".
+    # Without a filter, show the full pipeline for all users.
+    if event_type:
+        funnel_rows = await db.fetch(
+            """
+            SELECT event_name, COUNT(DISTINCT user_id)::int AS users
+            FROM   events
+            WHERE  received_at >= NOW() - ($1 || ' days')::interval
+              AND  user_id IS NOT NULL
+              AND  event_name = ANY($2::text[])
+              AND  user_id IN (
+                SELECT DISTINCT user_id FROM events
+                WHERE  event_name = $3
+                  AND  received_at >= NOW() - ($1 || ' days')::interval
+              )
+            GROUP  BY event_name
+            """,
+            str(days),
+            funnel_steps,
+            event_type,
+        )
+    else:
+        funnel_rows = await db.fetch(
+            """
+            SELECT event_name, COUNT(DISTINCT user_id)::int AS users
+            FROM   events
+            WHERE  received_at  >= NOW() - ($1 || ' days')::interval
+              AND  user_id IS NOT NULL
+              AND  event_name = ANY($2::text[])
+            GROUP  BY event_name
+            """,
+            str(days),
+            funnel_steps,
+        )
     funnel_map = {r["event_name"]: r["users"] for r in funnel_rows}
     funnel = [
         {"step": step, "users": funnel_map.get(step, 0)}

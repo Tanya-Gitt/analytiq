@@ -324,7 +324,7 @@ function SegmentADashboard({ days }: { days: number }) {
       <div className="grid grid-cols-2 gap-6">
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Conversion funnel</h3>
-          <FunnelChart data={data.funnel} />
+          <FunnelChart data={data.funnel} filteredBy={eventType || undefined} />
         </div>
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">New vs returning users</h3>
