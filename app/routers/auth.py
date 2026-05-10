@@ -86,6 +86,10 @@ async def signup(body: SignupRequest, pool: asyncpg.Pool = Depends(get_pool)):
 
     async with pool.acquire() as conn:
         async with conn.transaction():
+            # app_user has NOINHERIT — must SET ROLE to access tables granted to app_role.
+            # users/orgs have no RLS so we don't need SET LOCAL app.org_id here.
+            await conn.execute("SET LOCAL ROLE app_role")
+
             # Check email not already taken
             existing = await conn.fetchval(
                 "SELECT id FROM users WHERE email = $1", body.email
@@ -132,55 +136,59 @@ async def login(body: LoginRequest, pool: asyncpg.Pool = Depends(get_pool)):
     )
 
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            SELECT u.id, u.org_id, u.password_hash, u.failed_login_attempts,
-                   u.locked_until, o.api_key
-            FROM users u
-            JOIN orgs o ON o.id = u.org_id
-            WHERE u.email = $1
-            """,
-            body.email,
-        )
-
-        # Always run bcrypt to prevent timing-based user enumeration.
-        # If user not found, compare against a dummy hash (same cost, same time).
-        stored_hash = row["password_hash"].encode() if row else _DUMMY_HASH.encode()
-        password_ok = bcrypt.checkpw(body.password.encode(), stored_hash)
-
-        if row is None or not password_ok:
-            # Increment failure counter for known users (unknown users: no-op)
-            if row is not None:
-                await conn.execute(
-                    """
-                    UPDATE users
-                    SET failed_login_attempts = failed_login_attempts + 1,
-                        locked_until = CASE
-                            WHEN failed_login_attempts + 1 >= $2
-                            THEN NOW() + $3::interval
-                            ELSE locked_until
-                        END
-                    WHERE id = $1
-                    """,
-                    row["id"],
-                    _MAX_FAILED_ATTEMPTS,
-                    str(int(_LOCKOUT_DURATION.total_seconds())) + " seconds",
-                )
-            raise invalid
-
-        # Check lockout AFTER verifying password (same response for wrong pass + locked)
-        if row["locked_until"] and row["locked_until"] > datetime.now(tz=timezone.utc):
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="account temporarily locked — too many failed attempts",
-                headers={"Retry-After": "900"},
+        async with conn.transaction():
+            # app_user has NOINHERIT — SET LOCAL ROLE so the role resets when
+            # the transaction ends and the connection is returned to the pool.
+            await conn.execute("SET LOCAL ROLE app_role")
+            row = await conn.fetchrow(
+                """
+                SELECT u.id, u.org_id, u.password_hash, u.failed_login_attempts,
+                       u.locked_until, o.api_key
+                FROM users u
+                JOIN orgs o ON o.id = u.org_id
+                WHERE u.email = $1
+                """,
+                body.email,
             )
 
-        # Successful login — reset failure counter
-        await conn.execute(
-            "UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1",
-            row["id"],
-        )
+            # Always run bcrypt to prevent timing-based user enumeration.
+            # If user not found, compare against a dummy hash (same cost, same time).
+            stored_hash = row["password_hash"].encode() if row else _DUMMY_HASH.encode()
+            password_ok = bcrypt.checkpw(body.password.encode(), stored_hash)
+
+            if row is None or not password_ok:
+                # Increment failure counter for known users (unknown users: no-op)
+                if row is not None:
+                    await conn.execute(
+                        """
+                        UPDATE users
+                        SET failed_login_attempts = failed_login_attempts + 1,
+                            locked_until = CASE
+                                WHEN failed_login_attempts + 1 >= $2
+                                THEN NOW() + $3::interval
+                                ELSE locked_until
+                            END
+                        WHERE id = $1
+                        """,
+                        row["id"],
+                        _MAX_FAILED_ATTEMPTS,
+                        str(int(_LOCKOUT_DURATION.total_seconds())) + " seconds",
+                    )
+                raise invalid
+
+            # Check lockout AFTER verifying password (same response for wrong pass + locked)
+            if row["locked_until"] and row["locked_until"] > datetime.now(tz=timezone.utc):
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="account temporarily locked — too many failed attempts",
+                    headers={"Retry-After": "900"},
+                )
+
+            # Successful login — reset failure counter
+            await conn.execute(
+                "UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1",
+                row["id"],
+            )
 
     token = create_access_token(
         user_id=str(row["id"]), org_id=str(row["org_id"])
@@ -203,16 +211,21 @@ async def me(
                             detail="not authenticated")
     org_id = verify_jwt_get_org_id(credentials.credentials)
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            SELECT u.id, u.email, o.name AS org_name, o.api_key
-            FROM   users u
-            JOIN   orgs  o ON o.id = u.org_id
-            WHERE  u.org_id = $1
-            LIMIT  1
-            """,
-            org_id,
-        )
+        async with conn.transaction():
+            # app_user has NOINHERIT — must SET ROLE to access tables granted
+            # to app_role.  SET LOCAL app.org_id so RLS policies on users fire.
+            await conn.execute("SET LOCAL ROLE app_role")
+            await conn.execute(f"SET LOCAL app.org_id = '{org_id}'")
+            row = await conn.fetchrow(
+                """
+                SELECT u.id, u.email, o.name AS org_name, o.api_key
+                FROM   users u
+                JOIN   orgs  o ON o.id = u.org_id
+                WHERE  u.org_id = $1
+                LIMIT  1
+                """,
+                org_id,
+            )
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="user not found")
@@ -243,15 +256,18 @@ async def rotate_api_key(
                             detail="not authenticated")
     org_id = verify_jwt_get_org_id(credentials.credentials)
     async with pool.acquire() as conn:
-        new_key = await conn.fetchval(
-            """
-            UPDATE orgs
-            SET    api_key = encode(gen_random_bytes(24), 'hex')
-            WHERE  id = $1
-            RETURNING api_key
-            """,
-            org_id,
-        )
+        async with conn.transaction():
+            await conn.execute("SET LOCAL ROLE app_role")
+            await conn.execute(f"SET LOCAL app.org_id = '{org_id}'")
+            new_key = await conn.fetchval(
+                """
+                UPDATE orgs
+                SET    api_key = encode(gen_random_bytes(24), 'hex')
+                WHERE  id = $1
+                RETURNING api_key
+                """,
+                org_id,
+            )
     if new_key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="org not found")
