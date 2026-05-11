@@ -352,6 +352,86 @@ async def _fetch_segment_a_data(
     }
 
 
+# ── Retention cohort data ─────────────────────────────────────────────────────
+
+async def _fetch_retention_data(
+    db: asyncpg.Connection,
+    weeks: int,
+) -> dict:
+    """
+    Weekly retention cohort matrix.
+
+    Returns:
+      cohorts: list of { cohort_week, cohort_size, weeks: [{ week_number, retained }] }
+      weeks:   number of weeks in the window
+
+    Algorithm:
+      - "cohort week" = the ISO week a user first appeared
+      - For each cohort, count distinct users who returned in week N
+        (where N=0 means same week as cohort, N=1 means one week later, etc.)
+      - Only cohorts that started within the last `weeks` weeks are returned
+    """
+    rows = await db.fetch(
+        """
+        WITH first_seen AS (
+            SELECT user_id,
+                   DATE_TRUNC('week', MIN(received_at))::date AS cohort_week
+            FROM   events
+            WHERE  user_id IS NOT NULL
+              AND  received_at >= NOW() - ($1 || ' weeks')::interval
+            GROUP  BY user_id
+        ),
+        activity AS (
+            SELECT DISTINCT
+                   e.user_id,
+                   DATE_TRUNC('week', e.received_at)::date AS active_week
+            FROM   events e
+            WHERE  e.user_id IS NOT NULL
+              AND  e.received_at >= NOW() - ($1 || ' weeks')::interval
+        ),
+        cohort_retention AS (
+            SELECT
+                fs.cohort_week,
+                COUNT(DISTINCT fs.user_id)::int             AS cohort_size,
+                (a.active_week - fs.cohort_week) / 7        AS week_number,
+                COUNT(DISTINCT a.user_id)::int              AS retained
+            FROM   first_seen fs
+            JOIN   activity   a  ON a.user_id = fs.user_id
+                                 AND a.active_week >= fs.cohort_week
+                                 AND a.active_week <= fs.cohort_week + ($1 * 7 - 1)
+            GROUP  BY fs.cohort_week, week_number
+        )
+        SELECT cohort_week::text,
+               cohort_size,
+               week_number,
+               retained
+        FROM   cohort_retention
+        ORDER  BY cohort_week, week_number
+        """,
+        str(weeks),
+    )
+
+    # Group into cohort objects
+    cohort_map: dict[str, dict] = {}
+    for row in rows:
+        cw = row["cohort_week"]
+        if cw not in cohort_map:
+            cohort_map[cw] = {
+                "cohort_week": cw,
+                "cohort_size": row["cohort_size"],
+                "weeks": [],
+            }
+        cohort_map[cw]["weeks"].append({
+            "week_number": row["week_number"],
+            "retained":    row["retained"],
+        })
+
+    return {
+        "cohorts":     list(cohort_map.values()),
+        "weeks":       weeks,
+    }
+
+
 # ── Segment B: orders / revenue ───────────────────────────────────────────────
 
 @router.get("/dashboard/segment-b")
@@ -404,5 +484,32 @@ async def dashboard_segment_a(
         return _dashboard_cache[key]
 
     result = await _fetch_segment_a_data(db, days, event_type)
+    _dashboard_cache[key] = result
+    return result
+
+
+# ── Retention cohort ──────────────────────────────────────────────────────────
+
+@router.get("/dashboard/retention")
+async def dashboard_retention(
+    weeks: int = Query(default=12, ge=1, le=52),
+    org_id: str = Depends(get_org_id_from_jwt),
+    db: asyncpg.Connection = Depends(get_org_db),
+):
+    """
+    Weekly retention cohort matrix for Segment A users.
+
+    Returns:
+      cohorts  — list of cohort objects, each with:
+                   cohort_week  — ISO date (Monday) of the cohort's first week
+                   cohort_size  — number of users in this cohort
+                   weeks        — [{week_number, retained}] for each subsequent week
+      weeks    — number of weeks in the window
+    """
+    key = _cache_key(org_id, "retention", weeks)
+    if key in _dashboard_cache:
+        return _dashboard_cache[key]
+
+    result = await _fetch_retention_data(db, weeks)
     _dashboard_cache[key] = result
     return result

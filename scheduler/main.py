@@ -31,6 +31,7 @@ from app.connectors.sync import sync_connector
 from app.database import _init_connection  # JSONB codec registration
 
 from .alert_evaluator import evaluate_alerts
+from .digest import send_weekly_digest
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,15 +53,17 @@ async def _recover_orphaned_runs(pool: asyncpg.Pool) -> None:
     'failed', and set the corresponding connector to status='error'.
     """
     async with pool.acquire() as conn:
-        orphaned = await conn.fetch(
-            """
-            SELECT id, connector_id
-            FROM   sync_runs
-            WHERE  status     = 'running'
-              AND  started_at < NOW() - make_interval(mins => $1)
-            """,
-            _ORPHAN_THRESHOLD_MINUTES,
-        )
+        async with conn.transaction():
+            await conn.execute("SET LOCAL ROLE app_role")
+            orphaned = await conn.fetch(
+                """
+                SELECT id, connector_id
+                FROM   sync_runs
+                WHERE  status     = 'running'
+                  AND  started_at < NOW() - make_interval(mins => $1)
+                """,
+                _ORPHAN_THRESHOLD_MINUTES,
+            )
 
     if not orphaned:
         logger.debug("No orphaned sync_runs found")
@@ -69,26 +72,28 @@ async def _recover_orphaned_runs(pool: asyncpg.Pool) -> None:
     logger.warning("Recovering %d orphaned sync_run(s)", len(orphaned))
     for row in orphaned:
         async with pool.acquire() as conn:
-            # Sequential — asyncpg does not allow concurrent ops on one connection
-            await conn.execute(
-                """
-                UPDATE sync_runs
-                SET status        = 'failed',
-                    finished_at   = NOW(),
-                    error_message = 'Orphaned: scheduler restarted'
-                WHERE id = $1
-                """,
-                row["id"],
-            )
-            await conn.execute(
-                """
-                UPDATE connectors
-                SET status     = 'error',
-                    last_error = 'Sync orphaned at scheduler restart'
-                WHERE id = $1
-                """,
-                row["connector_id"],
-            )
+            async with conn.transaction():
+                await conn.execute("SET LOCAL ROLE app_role")
+                # Sequential — asyncpg does not allow concurrent ops on one connection
+                await conn.execute(
+                    """
+                    UPDATE sync_runs
+                    SET status        = 'failed',
+                        finished_at   = NOW(),
+                        error_message = 'Orphaned: scheduler restarted'
+                    WHERE id = $1
+                    """,
+                    row["id"],
+                )
+                await conn.execute(
+                    """
+                    UPDATE connectors
+                    SET status     = 'error',
+                        last_error = 'Sync orphaned at scheduler restart'
+                    WHERE id = $1
+                    """,
+                    row["connector_id"],
+                )
 
 
 # ── connector poll job ────────────────────────────────────────────────────────
@@ -107,19 +112,21 @@ async def _connector_poll(pool: asyncpg.Pool) -> None:
     but we also skip them here to avoid unnecessary task overhead.
     """
     async with pool.acquire() as conn:
-        due = await conn.fetch(
-            """
-            SELECT id, org_id, type, segment, config,
-                   sync_interval_minutes, status
-            FROM   connectors
-            WHERE  status  = 'active'
-              AND  type   IN ('sheets_csv', 'csv_upload')
-              AND  (
-                  last_synced_at IS NULL
-                  OR last_synced_at + make_interval(mins => sync_interval_minutes) <= NOW()
-              )
-            """
-        )
+        async with conn.transaction():
+            await conn.execute("SET LOCAL ROLE app_role")
+            due = await conn.fetch(
+                """
+                SELECT id, org_id, type, segment, config,
+                       sync_interval_minutes, status
+                FROM   connectors
+                WHERE  status  = 'active'
+                  AND  type   IN ('sheets_csv', 'csv_upload')
+                  AND  (
+                      last_synced_at IS NULL
+                      OR last_synced_at + make_interval(mins => sync_interval_minutes) <= NOW()
+                  )
+                """
+            )
 
     if not due:
         logger.debug("connector_poll: no connectors due")
@@ -196,6 +203,20 @@ async def run_scheduler() -> None:  # pragma: no cover
         args=[pool],
         id="alert_eval",
         next_run_time=now_utc + timedelta(seconds=_ALERT_STAGGER_SECONDS),
+    )
+
+    # Weekly digest: every Monday at 09:00 UTC.
+    # Sends a plain-text + HTML summary of the past 7 days to each org's
+    # admin email. Skipped gracefully when SMTP_HOST is not configured.
+    scheduler.add_job(
+        send_weekly_digest,
+        "cron",
+        day_of_week="mon",
+        hour=9,
+        minute=0,
+        args=[pool],
+        id="weekly_digest",
+        timezone="UTC",
     )
 
     scheduler.start()

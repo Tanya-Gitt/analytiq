@@ -12,7 +12,8 @@ import EventsChart from '@/components/charts/EventsChart';
 import TopEventsChart from '@/components/charts/TopEventsChart';
 import FunnelChart from '@/components/charts/FunnelChart';
 import NewVsReturningChart from '@/components/charts/NewVsReturningChart';
-import { getSegmentBDashboard, getSegmentADashboard, downloadExport, ApiError } from '@/lib/api';
+import RetentionCohortChart from '@/components/charts/RetentionCohortChart';
+import { getSegmentBDashboard, getSegmentADashboard, getRetention, downloadExport, ApiError } from '@/lib/api';
 
 const DAYS_OPTIONS = [7, 14, 30, 90, 180, 365];
 
@@ -249,11 +250,18 @@ function SegmentBDashboard({ days }: { days: number }) {
 
 function SegmentADashboard({ days }: { days: number }) {
   const [eventType, setEventType] = useState('');
+  const [retentionWeeks, setRetentionWeeks] = useState(12);
 
   const { data, error, isLoading } = useSWR(
     ['segment-a', days, eventType],
     () => getSegmentADashboard(days, eventType || undefined),
     { refreshInterval: 60_000 },
+  );
+
+  const { data: retData, isLoading: retLoading } = useSWR(
+    ['retention', retentionWeeks],
+    () => getRetention(retentionWeeks),
+    { refreshInterval: 300_000 },
   );
 
   if (isLoading) return <DashboardSkeleton cols={2} />;
@@ -330,6 +338,27 @@ function SegmentADashboard({ days }: { days: number }) {
           <h3 className="text-sm font-semibold text-gray-700 mb-4">New vs returning users</h3>
           <NewVsReturningChart data={data.new_vs_returning} />
         </div>
+      </div>
+
+      {/* Retention cohort */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-700">User retention cohorts</h3>
+          <select
+            value={retentionWeeks}
+            onChange={e => setRetentionWeeks(Number(e.target.value))}
+            className="input w-auto text-xs py-1"
+          >
+            {[4, 8, 12, 26, 52].map(w => (
+              <option key={w} value={w}>{w} weeks</option>
+            ))}
+          </select>
+        </div>
+        {retLoading ? (
+          <div className="h-32 bg-gray-100 rounded animate-pulse" />
+        ) : retData ? (
+          <RetentionCohortChart cohorts={retData.cohorts} weeks={retData.weeks} />
+        ) : null}
       </div>
     </div>
   );

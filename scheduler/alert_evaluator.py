@@ -18,19 +18,14 @@ Notifications:
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import os
-import smtplib
-import ssl
 from datetime import datetime, timezone
-from email.message import EmailMessage
 from typing import Any
 
 import asyncpg
-import httpx
 
 from .metrics import evaluate_metric
+from .notifications import send_email, send_slack
 
 logger = logging.getLogger(__name__)
 
@@ -39,64 +34,14 @@ _REFIRE_HOURS = 24  # re-send a still-triggered alert after this many hours
 
 # ── notification dispatch ─────────────────────────────────────────────────────
 
-async def _send_slack(webhook_url: str, text: str) -> None:
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(webhook_url, json={"text": text})
-            if resp.status_code != 200:
-                logger.warning(
-                    "Slack webhook returned %d: %s", resp.status_code, resp.text[:200]
-                )
-    except Exception:  # noqa: BLE001
-        logger.exception("Failed to send Slack notification")
-
-
-def _send_email_sync(
-    to_addr: str,
-    subject: str,
-    body: str,
-) -> None:
-    """Send email via SMTP. Runs in a thread executor (smtplib is sync)."""
-    smtp_host = os.environ.get("SMTP_HOST", "")
-    if not smtp_host:
-        logger.info("SMTP_HOST not set — skipping email notification to %s", to_addr)
-        return
-
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_user = os.environ.get("SMTP_USER", "")
-    smtp_pass = os.environ.get("SMTP_PASS", "")
-    smtp_from = os.environ.get("SMTP_FROM", smtp_user)
-
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = smtp_from
-    msg["To"] = to_addr
-    msg.set_content(body)
-
-    context = ssl.create_default_context()
-    try:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as smtp:
-            smtp.ehlo()
-            smtp.starttls(context=context)
-            if smtp_user:
-                smtp.login(smtp_user, smtp_pass)
-            smtp.send_message(msg)
-        logger.info("Email sent to %s: %s", to_addr, subject)
-    except Exception:  # noqa: BLE001
-        logger.exception("Failed to send email to %s", to_addr)
-
-
 async def _notify(rule: dict[str, Any], subject: str, body: str) -> None:
     channel = rule["channel"]
     destination = rule["destination"]
 
     if channel == "slack":
-        await _send_slack(destination, f"*{subject}*\n{body}")
+        await send_slack(destination, f"*{subject}*\n{body}")
     elif channel == "email":
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None, _send_email_sync, destination, subject, body
-        )
+        await send_email(destination, subject, body)
     else:
         logger.warning("Unknown notification channel %r for rule %s", channel, rule["id"])
 
@@ -139,14 +84,16 @@ async def evaluate_alerts(pool: asyncpg.Pool) -> None:
     unique (org_id, metric) pair), then apply the FSM and fire notifications.
     """
     async with pool.acquire() as conn:
-        rules = await conn.fetch(
-            """
-            SELECT id, org_id, name, metric, condition, threshold,
-                   window_hours, channel, destination, state, last_triggered_at
-            FROM   alert_rules
-            ORDER  BY org_id, metric
-            """
-        )
+        async with conn.transaction():
+            await conn.execute("SET LOCAL ROLE app_role")
+            rules = await conn.fetch(
+                """
+                SELECT id, org_id, name, metric, condition, threshold,
+                       window_hours, channel, destination, state, last_triggered_at
+                FROM   alert_rules
+                ORDER  BY org_id, metric
+                """
+            )
 
     if not rules:
         return
@@ -168,8 +115,9 @@ async def evaluate_alerts(pool: asyncpg.Pool) -> None:
                 for rule in rules
                 if str(rule["org_id"]) == org_id and rule["metric"] == metric
             )
-            # RLS: set org context
+            # RLS: set role + org context (SET LOCAL resets at transaction end)
             async with conn.transaction():
+                await conn.execute("SET LOCAL ROLE app_role")
                 await conn.execute(f"SET LOCAL app.org_id = '{str(org_id)}'")
                 value = await evaluate_metric(conn, org_id, metric, window_hours)
             metric_values[(org_id, metric)] = value
@@ -205,17 +153,19 @@ async def evaluate_alerts(pool: asyncpg.Pool) -> None:
         # Persist state change
         if new_state != current_state or (should_notify and notification_kind == "triggered"):
             async with pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    UPDATE alert_rules
-                    SET state             = $2,
-                        last_triggered_at = CASE WHEN $3 THEN NOW() ELSE last_triggered_at END
-                    WHERE id = $1
-                    """,
-                    rule_dict["id"],
-                    new_state,
-                    notification_kind == "triggered" and should_notify,
-                )
+                async with conn.transaction():
+                    await conn.execute("SET LOCAL ROLE app_role")
+                    await conn.execute(
+                        """
+                        UPDATE alert_rules
+                        SET state             = $2,
+                            last_triggered_at = CASE WHEN $3 THEN NOW() ELSE last_triggered_at END
+                        WHERE id = $1
+                        """,
+                        rule_dict["id"],
+                        new_state,
+                        notification_kind == "triggered" and should_notify,
+                    )
 
         # Fire notification
         if should_notify:

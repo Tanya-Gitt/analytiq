@@ -276,6 +276,23 @@ export function updateConnector(
   });
 }
 
+// ── Dashboard — Retention cohort ─────────────────────────────────────────────
+
+export interface RetentionWeek    { week_number: number; retained: number }
+export interface RetentionCohort  {
+  cohort_week:  string;
+  cohort_size:  number;
+  weeks:        RetentionWeek[];
+}
+export interface RetentionData {
+  cohorts: RetentionCohort[];
+  weeks:   number;
+}
+
+export function getRetention(weeks = 12) {
+  return request<RetentionData>(`/dashboard/retention?weeks=${weeks}`);
+}
+
 // ── Export ────────────────────────────────────────────────────────────────────
 
 /**
