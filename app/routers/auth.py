@@ -165,14 +165,14 @@ async def login(body: LoginRequest, pool: asyncpg.Pool = Depends(get_pool)):
                         SET failed_login_attempts = failed_login_attempts + 1,
                             locked_until = CASE
                                 WHEN failed_login_attempts + 1 >= $2
-                                THEN NOW() + $3::interval
+                                THEN NOW() + $3
                                 ELSE locked_until
                             END
                         WHERE id = $1
                         """,
                         row["id"],
                         _MAX_FAILED_ATTEMPTS,
-                        str(int(_LOCKOUT_DURATION.total_seconds())) + " seconds",
+                        _LOCKOUT_DURATION,
                     )
                 raise invalid
 

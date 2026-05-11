@@ -66,13 +66,16 @@ async def _event_generator(
     # only receives *new* events rather than a historical dump.
     if cursor is None:
         async with pool.acquire() as conn:
-            cursor = await conn.fetchval(
-                """
-                SELECT COALESCE(MAX(id), 0) FROM events
-                WHERE org_id = $1
-                """,
-                org_id,
-            ) or 0
+            async with conn.transaction():
+                await conn.execute("SET LOCAL ROLE app_role")
+                await conn.execute(f"SET LOCAL app.org_id = '{org_id}'")
+                cursor = await conn.fetchval(
+                    """
+                    SELECT COALESCE(MAX(id), 0) FROM events
+                    WHERE org_id = $1
+                    """,
+                    org_id,
+                ) or 0
 
     # Send an initial "connected" comment so the browser knows the stream
     # is live (SSE comment lines start with ":").
