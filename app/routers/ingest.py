@@ -50,6 +50,7 @@ async def _check_rate_limit_db(pool: asyncpg.Pool, org_id: str) -> bool:
     """
     async with pool.acquire() as conn:
         async with conn.transaction():
+            await conn.execute("SET LOCAL ROLE app_role")
             # Step 1 — ensure row exists
             await conn.execute(
                 """

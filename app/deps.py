@@ -92,7 +92,10 @@ async def get_org_db_by_api_key(
     conn: asyncpg.Connection = await pool.acquire()
     try:
         async with conn.transaction():
-            # Lookup happens OUTSIDE of RLS context (orgs table has no RLS policy)
+            # app_user has NOINHERIT — must SET ROLE before touching any table
+            # granted to app_role (including orgs). orgs has no RLS policy so the
+            # lookup works at app_role without an org context.
+            await conn.execute("SET LOCAL ROLE app_role")
             row = await conn.fetchrow(
                 "SELECT id FROM orgs WHERE api_key = $1",
                 org_api_key,
@@ -102,8 +105,6 @@ async def get_org_db_by_api_key(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="unknown api key",
                 )
-            # Drop to app_role so RLS policies fire (postgres bypasses RLS)
-            await conn.execute("SET LOCAL ROLE app_role")
             await conn.execute(f"SET LOCAL app.org_id = '{row['id']}'")
             yield conn
     finally:
