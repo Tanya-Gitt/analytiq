@@ -48,6 +48,16 @@ const NAV = [
     ),
   },
   {
+    href: '/retention',
+    label: 'Retention',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M3 3h7v7H3V3zm0 11h7v7H3v-7zm11-11h7v7h-7V3zm0 11h7v7h-7v-7z" />
+      </svg>
+    ),
+  },
+  {
     href: '/alerts',
     label: 'Alerts',
     icon: (

@@ -359,17 +359,17 @@ async def _fetch_retention_data(
     weeks: int,
 ) -> dict:
     """
-    Weekly retention cohort matrix.
+    Weekly retention cohort matrix + DAU/WAU/MAU stickiness metrics.
 
     Returns:
-      cohorts: list of { cohort_week, cohort_size, weeks: [{ week_number, retained }] }
-      weeks:   number of weeks in the window
-
-    Algorithm:
-      - "cohort week" = the ISO week a user first appeared
-      - For each cohort, count distinct users who returned in week N
-        (where N=0 means same week as cohort, N=1 means one week later, etc.)
-      - Only cohorts that started within the last `weeks` weeks are returned
+      cohorts            — list of { cohort_week, cohort_size, weeks: [{ week_number, retained }] }
+      weeks              — number of weeks in the window
+      avg_by_week        — [{week_number, avg_pct}] average retention % across all cohorts
+      dau                — distinct users in last 1 day
+      wau                — distinct users in last 7 days
+      mau                — distinct users in last 30 days
+      stickiness_dau_wau — dau / wau  (0-1)
+      stickiness_dau_mau — dau / mau  (0-1)
     """
     rows = await db.fetch(
         """
@@ -426,9 +426,45 @@ async def _fetch_retention_data(
             "retained":    row["retained"],
         })
 
+    cohorts = list(cohort_map.values())
+
+    # Average retention % per week across all cohorts
+    week_totals: dict[int, list[float]] = {}
+    for cohort in cohorts:
+        size = cohort["cohort_size"]
+        if size == 0:
+            continue
+        for w in cohort["weeks"]:
+            wn = w["week_number"]
+            week_totals.setdefault(wn, []).append(w["retained"] / size)
+    avg_by_week = [
+        {"week_number": wn, "avg_pct": round(sum(vals) / len(vals), 4)}
+        for wn, vals in sorted(week_totals.items())
+    ]
+
+    # DAU / WAU / MAU stickiness
+    dau: int = await db.fetchval(
+        "SELECT COUNT(DISTINCT user_id)::int FROM events "
+        "WHERE user_id IS NOT NULL AND received_at >= NOW() - INTERVAL '1 day'"
+    ) or 0
+    wau: int = await db.fetchval(
+        "SELECT COUNT(DISTINCT user_id)::int FROM events "
+        "WHERE user_id IS NOT NULL AND received_at >= NOW() - INTERVAL '7 days'"
+    ) or 0
+    mau: int = await db.fetchval(
+        "SELECT COUNT(DISTINCT user_id)::int FROM events "
+        "WHERE user_id IS NOT NULL AND received_at >= NOW() - INTERVAL '30 days'"
+    ) or 0
+
     return {
-        "cohorts":     list(cohort_map.values()),
-        "weeks":       weeks,
+        "cohorts":            cohorts,
+        "weeks":              weeks,
+        "avg_by_week":        avg_by_week,
+        "dau":                dau,
+        "wau":                wau,
+        "mau":                mau,
+        "stickiness_dau_wau": round(dau / wau, 4) if wau else None,
+        "stickiness_dau_mau": round(dau / mau, 4) if mau else None,
     }
 
 

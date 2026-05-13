@@ -284,9 +284,16 @@ export interface RetentionCohort  {
   cohort_size:  number;
   weeks:        RetentionWeek[];
 }
+export interface AvgByWeek { week_number: number; avg_pct: number }
 export interface RetentionData {
-  cohorts: RetentionCohort[];
-  weeks:   number;
+  cohorts:            RetentionCohort[];
+  weeks:              number;
+  avg_by_week:        AvgByWeek[];
+  dau:                number;
+  wau:                number;
+  mau:                number;
+  stickiness_dau_wau: number | null;
+  stickiness_dau_mau: number | null;
 }
 
 export function getRetention(weeks = 12) {
