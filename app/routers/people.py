@@ -28,9 +28,13 @@ async def list_people(
     search_clause = ""
     if q:
         params = [f"%{q}%", limit, offset]
-        search_clause = (
-            "AND (s.user_id ILIKE $1 OR COALESCE(t.traits, '{}')::text ILIKE $1)"
-        )
+        search_clause = """
+            AND (
+                s.user_id ILIKE $1
+                OR COALESCE(t.traits->>'email', '') ILIKE $1
+                OR COALESCE(t.traits->>'name',  '') ILIKE $1
+            )
+        """
         limit_idx, offset_idx = 2, 3
     else:
         limit_idx, offset_idx = 1, 2
