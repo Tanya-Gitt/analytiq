@@ -51,19 +51,22 @@ async def _recover_orphaned_runs(pool: asyncpg.Pool) -> None:
     """
     Mark sync_runs rows that are stuck in 'running' for > 5 minutes as
     'failed', and set the corresponding connector to status='error'.
+
+    This is a cross-tenant maintenance operation — it intentionally queries
+    across all orgs without an org context.  Do NOT set app_role here; the
+    pool connects as a privileged user (postgres in tests, the analytics DB
+    user in production) that can see all rows directly.
     """
     async with pool.acquire() as conn:
-        async with conn.transaction():
-            await conn.execute("SET LOCAL ROLE app_role")
-            orphaned = await conn.fetch(
-                """
-                SELECT id, connector_id
-                FROM   sync_runs
-                WHERE  status     = 'running'
-                  AND  started_at < NOW() - make_interval(mins => $1)
-                """,
-                _ORPHAN_THRESHOLD_MINUTES,
-            )
+        orphaned = await conn.fetch(
+            """
+            SELECT id, connector_id
+            FROM   sync_runs
+            WHERE  status     = 'running'
+              AND  started_at < NOW() - make_interval(mins => $1)
+            """,
+            _ORPHAN_THRESHOLD_MINUTES,
+        )
 
     if not orphaned:
         logger.debug("No orphaned sync_runs found")
@@ -73,7 +76,6 @@ async def _recover_orphaned_runs(pool: asyncpg.Pool) -> None:
     for row in orphaned:
         async with pool.acquire() as conn:
             async with conn.transaction():
-                await conn.execute("SET LOCAL ROLE app_role")
                 # Sequential — asyncpg does not allow concurrent ops on one connection
                 await conn.execute(
                     """
@@ -112,21 +114,21 @@ async def _connector_poll(pool: asyncpg.Pool) -> None:
     but we also skip them here to avoid unnecessary task overhead.
     """
     async with pool.acquire() as conn:
-        async with conn.transaction():
-            await conn.execute("SET LOCAL ROLE app_role")
-            due = await conn.fetch(
-                """
-                SELECT id, org_id, type, segment, config,
-                       sync_interval_minutes, status
-                FROM   connectors
-                WHERE  status  = 'active'
-                  AND  type   IN ('sheets_csv', 'csv_upload')
-                  AND  (
-                      last_synced_at IS NULL
-                      OR last_synced_at + make_interval(mins => sync_interval_minutes) <= NOW()
-                  )
-                """
-            )
+        # Cross-tenant poll — no app_role or app.org_id needed here.
+        # sync_connector sets the org context per-connector when it runs.
+        due = await conn.fetch(
+            """
+            SELECT id, org_id, type, segment, config,
+                   sync_interval_minutes, status
+            FROM   connectors
+            WHERE  status  = 'active'
+              AND  type   IN ('sheets_csv', 'csv_upload')
+              AND  (
+                  last_synced_at IS NULL
+                  OR last_synced_at + make_interval(mins => sync_interval_minutes) <= NOW()
+              )
+            """
+        )
 
     if not due:
         logger.debug("connector_poll: no connectors due")

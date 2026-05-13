@@ -63,7 +63,12 @@ def verify_jwt(token: str) -> dict[str, Any]:
     except JWTError:
         raise credentials_exception
 
-    if not payload.get("org_id"):
+    org_id_str = payload.get("org_id")
+    if not org_id_str:
+        raise credentials_exception
+    try:
+        UUID(str(org_id_str))
+    except ValueError:
         raise credentials_exception
     return payload
 

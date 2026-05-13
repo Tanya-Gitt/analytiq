@@ -356,7 +356,7 @@ class TestSendSlack:
         mock_response = MagicMock()
         mock_response.status_code = 200
 
-        with patch("scheduler.alert_evaluator.httpx.AsyncClient") as MockClient:
+        with patch("scheduler.notifications.httpx.AsyncClient") as MockClient:
             mock_client_instance = AsyncMock()
             mock_client_instance.post.return_value = mock_response
             MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
@@ -373,7 +373,7 @@ class TestSendSlack:
         mock_response.status_code = 503
         mock_response.text = "Service Unavailable"
 
-        with patch("scheduler.alert_evaluator.httpx.AsyncClient") as MockClient:
+        with patch("scheduler.notifications.httpx.AsyncClient") as MockClient:
             mock_client_instance = AsyncMock()
             mock_client_instance.post.return_value = mock_response
             MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
@@ -385,7 +385,7 @@ class TestSendSlack:
     @pytest.mark.asyncio
     async def test_network_exception_does_not_raise(self):
         """If httpx raises (network error), the exception is swallowed."""
-        with patch("scheduler.alert_evaluator.httpx.AsyncClient") as MockClient:
+        with patch("scheduler.notifications.httpx.AsyncClient") as MockClient:
             mock_client_instance = AsyncMock()
             mock_client_instance.post.side_effect = Exception("connection refused")
             MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
@@ -408,7 +408,7 @@ class TestSendEmailSync:
 
         mock_smtp_instance = MagicMock()
 
-        with patch("scheduler.alert_evaluator.smtplib.SMTP") as MockSMTP:
+        with patch("scheduler.notifications.smtplib.SMTP") as MockSMTP:
             MockSMTP.return_value.__enter__ = MagicMock(return_value=mock_smtp_instance)
             MockSMTP.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -426,7 +426,7 @@ class TestSendEmailSync:
         monkeypatch.setenv("SMTP_PORT", "587")
         monkeypatch.delenv("SMTP_USER", raising=False)
 
-        with patch("scheduler.alert_evaluator.smtplib.SMTP") as MockSMTP:
+        with patch("scheduler.notifications.smtplib.SMTP") as MockSMTP:
             MockSMTP.side_effect = Exception("connection refused")
 
             # Must not raise
@@ -455,7 +455,7 @@ class TestNotify:
             "destination": "https://hooks.slack.com/test",
         }
         with patch(
-            "scheduler.alert_evaluator._send_slack", new_callable=AsyncMock
+            "scheduler.alert_evaluator.send_slack", new_callable=AsyncMock
         ) as mock_slack:
             await _notify(rule, "ALERT", "metric is low")
 
