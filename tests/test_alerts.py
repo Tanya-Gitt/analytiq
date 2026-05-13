@@ -19,7 +19,8 @@ from scheduler.alert_evaluator import (
     _should_refire,
     evaluate_alerts,
 )
-from scheduler.notifications import _send_email_sync, send_slack as _send_slack
+from scheduler.notifications import _send_email_sync
+from scheduler.notifications import send_slack as _send_slack
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 

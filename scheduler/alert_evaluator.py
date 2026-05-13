@@ -84,16 +84,15 @@ async def evaluate_alerts(pool: asyncpg.Pool) -> None:
     unique (org_id, metric) pair), then apply the FSM and fire notifications.
     """
     async with pool.acquire() as conn:
-        async with conn.transaction():
-            await conn.execute("SET LOCAL ROLE app_role")
-            rules = await conn.fetch(
-                """
-                SELECT id, org_id, name, metric, condition, threshold,
-                       window_hours, channel, destination, state, last_triggered_at
-                FROM   alert_rules
-                ORDER  BY org_id, metric
-                """
-            )
+        # Cross-tenant query — no app_role/app.org_id; pool user sees all orgs.
+        rules = await conn.fetch(
+            """
+            SELECT id, org_id, name, metric, condition, threshold,
+                   window_hours, channel, destination, state, last_triggered_at
+            FROM   alert_rules
+            ORDER  BY org_id, metric
+            """
+        )
 
     if not rules:
         return
@@ -155,6 +154,7 @@ async def evaluate_alerts(pool: asyncpg.Pool) -> None:
             async with pool.acquire() as conn:
                 async with conn.transaction():
                     await conn.execute("SET LOCAL ROLE app_role")
+                    await conn.execute(f"SET LOCAL app.org_id = '{org_id}'")
                     await conn.execute(
                         """
                         UPDATE alert_rules
