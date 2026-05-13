@@ -704,3 +704,113 @@ export function getHeatmapScroll(pageUrl: string, days = 30) {
     `/heatmap/scroll?${params}`,
   );
 }
+
+// ── People / User Profiles ────────────────────────────────────────────────────
+
+export interface UserProfile {
+  user_id:      string;
+  total_events: number;
+  track_events: number;
+  first_seen:   string | null;
+  last_seen:    string | null;
+  traits:       Record<string, unknown>;
+}
+
+export interface UserEvent {
+  name:        string;
+  properties:  Record<string, unknown>;
+  received_at: string;
+}
+
+export interface UserDetail {
+  user_id:      string;
+  traits:       Record<string, unknown>;
+  total_events: number;
+  events:       UserEvent[];
+  limit:        number;
+  offset:       number;
+}
+
+export function listPeople(q?: string, limit = 50, offset = 0) {
+  const p = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (q) p.set('q', q);
+  return request<{ users: UserProfile[]; total: number; limit: number; offset: number }>(
+    `/people?${p}`,
+  );
+}
+
+export function getPerson(userId: string, limit = 50, offset = 0) {
+  const p = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  return request<UserDetail>(`/people/${encodeURIComponent(userId)}?${p}`);
+}
+
+// ── Churn Prediction ──────────────────────────────────────────────────────────
+
+export type RiskLevel = 'healthy' | 'warning' | 'at_risk' | 'critical';
+
+export interface ChurnUser {
+  user_id:       string;
+  last_seen:     string | null;
+  events_7d:     number;
+  events_30d:    number;
+  days_inactive: number;
+  risk_level:    RiskLevel;
+  risk_score:    number;
+  traits:        Record<string, unknown>;
+}
+
+export interface ChurnSummary {
+  healthy:  number;
+  warning:  number;
+  at_risk:  number;
+  critical: number;
+  total:    number;
+}
+
+export function getChurnSummary() {
+  return request<ChurnSummary>('/churn/summary');
+}
+
+export function listChurn(risk?: RiskLevel, limit = 100) {
+  const p = new URLSearchParams({ limit: String(limit) });
+  if (risk) p.set('risk', risk);
+  return request<ChurnUser[]>(`/churn?${p}`);
+}
+
+// ── Warehouse Sync ────────────────────────────────────────────────────────────
+
+export interface WarehouseStats {
+  events:       number;
+  orders:       number;
+  users:        number;
+  oldest_event: string | null;
+}
+
+export function getWarehouseStats() {
+  return request<WarehouseStats>('/warehouse/stats');
+}
+
+export async function downloadWarehouseExport(
+  dataset: 'events' | 'orders' | 'users',
+  opts: { since?: string; until?: string; fmt?: 'json' | 'csv'; limit?: number } = {},
+): Promise<void> {
+  const p = new URLSearchParams();
+  if (opts.since)  p.set('since',  opts.since);
+  if (opts.until)  p.set('until',  opts.until);
+  if (opts.fmt)    p.set('fmt',    opts.fmt ?? 'json');
+  if (opts.limit)  p.set('limit',  String(opts.limit ?? 50000));
+
+  const res = await fetch(`${BASE}/warehouse/export/${dataset}?${p}`, {
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+  });
+  if (!res.ok) throw new Error(`Export failed: HTTP ${res.status}`);
+
+  const blob = await res.blob();
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `${dataset}.${opts.fmt ?? 'json'}`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+

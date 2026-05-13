@@ -28,19 +28,22 @@ from app.routers import alerts as alerts_router
 from app.routers import annotations as annotations_router
 from app.routers import anomalies as anomalies_router
 from app.routers import auth as auth_router
+from app.routers import churn as churn_router
 from app.routers import connectors as connectors_router
 from app.routers import copilot as copilot_router
 from app.routers import dashboard as dashboard_router
-from app.routers import flags as flags_router
-from app.routers import heatmaps as heatmaps_router
 from app.routers import export as export_router
+from app.routers import flags as flags_router
 from app.routers import funnels as funnels_router
+from app.routers import heatmaps as heatmaps_router
 from app.routers import ingest as ingest_router
+from app.routers import people as people_router
 from app.routers import setup as setup_router
 from app.routers import share as share_router
 from app.routers import sso as sso_router
 from app.routers import stream as stream_router
 from app.routers import team as team_router
+from app.routers import warehouse as warehouse_router
 from app.routers import webhook as webhook_router
 
 
@@ -91,9 +94,12 @@ app.include_router(funnels_router.router,     prefix="/api",      tags=["funnels
 app.include_router(sso_router.router,         prefix="/api/auth", tags=["sso"])
 app.include_router(anomalies_router.router,   prefix="/api",      tags=["anomalies"])
 app.include_router(copilot_router.router,     prefix="/api",      tags=["copilot"])
+app.include_router(churn_router.router,       prefix="/api",      tags=["churn"])
 app.include_router(flags_router.router,       prefix="/api",      tags=["flags"])
 app.include_router(heatmaps_router.router,    prefix="/api",      tags=["heatmaps"])
+app.include_router(people_router.router,      prefix="/api",      tags=["people"])
 app.include_router(setup_router.router,       prefix="/api",      tags=["setup"])
+app.include_router(warehouse_router.router,   prefix="/api",      tags=["warehouse"])
 
 # ── Static: JS SDK ────────────────────────────────────────────────────────────
 # Serves sdk/analytics.js at /sdk/analytics.js
