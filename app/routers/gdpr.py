@@ -26,6 +26,28 @@ class OptOutRequest(BaseModel):
     user_id: str
 
 
+# ── Email → user_id resolution ────────────────────────────────────────────────
+
+async def _resolve_uid(db: asyncpg.Connection, raw: str) -> str:
+    """
+    If `raw` looks like an email address, try to find the canonical user_id
+    from events where traits->>'email' matches.  Falls back to `raw` unchanged.
+    """
+    if "@" not in raw:
+        return raw
+    canonical = await db.fetchval(
+        """
+        SELECT user_id FROM events
+        WHERE  user_id IS NOT NULL
+          AND  properties->>'email' = $1
+        ORDER BY received_at DESC
+        LIMIT 1
+        """,
+        raw,
+    )
+    return canonical if canonical else raw
+
+
 # ── Data export (right of access) ─────────────────────────────────────────────
 
 @router.get("/gdpr/export/{user_id:path}")
@@ -35,6 +57,7 @@ async def export_user_data(
     current_user: dict = Depends(require_admin),
 ):
     uid = urllib.parse.unquote(user_id)
+    resolved_uid = await _resolve_uid(db, uid)
 
     events = await db.fetch(
         """
@@ -42,18 +65,19 @@ async def export_user_data(
         FROM events WHERE user_id = $1
         ORDER BY received_at DESC
         """,
-        uid,
+        resolved_uid,
     )
     opted_out = await db.fetchval(
-        "SELECT EXISTS(SELECT 1 FROM gdpr_opt_outs WHERE user_id = $1)", uid
+        "SELECT EXISTS(SELECT 1 FROM gdpr_opt_outs WHERE user_id = $1)", resolved_uid
     )
 
     await log_action(db, current_user["sub"], "gdpr.export",
-                     resource_type="user", resource_id=uid)
+                     resource_type="user", resource_id=resolved_uid)
 
     return {
-        "user_id":   uid,
-        "opted_out": opted_out,
+        "user_id":        resolved_uid,
+        "queried_as":     uid if uid != resolved_uid else None,
+        "opted_out":      opted_out,
         "events": [
             {
                 "event_name":   r["event_name"],
@@ -76,6 +100,7 @@ async def forget_user(
     current_user: dict = Depends(require_admin),
 ):
     uid = urllib.parse.unquote(user_id)
+    uid = await _resolve_uid(db, uid)
 
     result = await db.execute("DELETE FROM events WHERE user_id = $1", uid)
     deleted_count = int(result.split()[-1]) if result else 0

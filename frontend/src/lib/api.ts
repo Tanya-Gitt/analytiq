@@ -799,6 +799,7 @@ export interface GdprOptOut {
 
 export interface GdprExport {
   user_id:      string;
+  queried_as:   string | null;   // set when email resolved to a user_id
   opted_out:    boolean;
   total_events: number;
   events: Array<{

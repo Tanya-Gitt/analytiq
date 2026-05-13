@@ -116,6 +116,12 @@ export default function GdprPage() {
           </button>
         </div>
 
+        {exportData && exportData.queried_as && (
+          <div className="mt-3 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+            Email <strong className="font-mono">{exportData.queried_as}</strong> resolved to user_id <strong className="font-mono">{exportData.user_id}</strong>
+          </div>
+        )}
+
         {exportData && exportData.total_events === 0 && !exportData.opted_out && (
           <div className="mt-3 px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
             No events found for <strong className="font-mono">{exportData.user_id}</strong>. Check the user_id is correct — it must match what was passed to <code>identify()</code>.
