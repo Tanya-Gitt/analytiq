@@ -69,8 +69,20 @@ async def list_churn(
         from fastapi import HTTPException
         raise HTTPException(400, f"risk must be one of {_LEVELS}")
 
+    # Build SQL-level risk filter so LIMIT doesn't cut off e.g. healthy users
+    # when sorting by days_inactive DESC.
+    risk_clause = ""
+    if risk == "healthy":
+        risk_clause = "AND a.days_inactive <= 7"
+    elif risk == "warning":
+        risk_clause = "AND a.days_inactive > 7  AND a.days_inactive <= 14"
+    elif risk == "at_risk":
+        risk_clause = "AND a.days_inactive > 14 AND a.days_inactive <= 30"
+    elif risk == "critical":
+        risk_clause = "AND a.days_inactive > 30"
+
     rows = await db.fetch(
-        """
+        f"""
         WITH latest_traits AS (
             SELECT DISTINCT ON (user_id)
                 user_id, properties AS traits
@@ -95,29 +107,26 @@ async def list_churn(
             a.events_7d::int   AS events_7d,
             a.events_30d::int  AS events_30d,
             a.days_inactive,
-            COALESCE(t.traits, '{}')::jsonb AS traits
+            COALESCE(t.traits, '{{}}')::jsonb AS traits
         FROM activity a
         LEFT JOIN latest_traits t USING (user_id)
+        WHERE 1=1 {risk_clause}
         ORDER BY a.days_inactive DESC
         LIMIT $1 OFFSET $2
         """,
         limit, offset,
     )
 
-    result = []
-    for r in rows:
-        days  = float(r["days_inactive"])
-        level = _risk_level(days)
-        if risk and level != risk:
-            continue
-        result.append({
+    return [
+        {
             "user_id":       r["user_id"],
             "last_seen":     r["last_seen"].isoformat() if r["last_seen"] else None,
             "events_7d":     r["events_7d"],
             "events_30d":    r["events_30d"],
-            "days_inactive": round(days, 1),
-            "risk_level":    level,
-            "risk_score":    _risk_score(days, r["events_30d"]),
+            "days_inactive": round(float(r["days_inactive"]), 1),
+            "risk_level":    _risk_level(float(r["days_inactive"])),
+            "risk_score":    _risk_score(float(r["days_inactive"]), r["events_30d"]),
             "traits":        dict(r["traits"]) if r["traits"] else {},
-        })
-    return result
+        }
+        for r in rows
+    ]

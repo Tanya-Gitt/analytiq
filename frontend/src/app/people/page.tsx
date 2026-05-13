@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import AppShell from '@/components/layout/AppShell';
 import { listPeople, getPerson, type UserProfile, type UserDetail } from '@/lib/api';
@@ -166,9 +166,17 @@ function ProfilePanel({ userId }: { userId: string }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function PeoplePage() {
-  const [search,      setSearch]      = useState('');
-  const [query,       setQuery]       = useState('');
-  const [selectedId,  setSelectedId]  = useState<string | null>(null);
+  const [search,     setSearch]     = useState('');
+  const [query,      setQuery]      = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Debounce: fire query 300ms after user stops typing; reset on clear
+  useEffect(() => {
+    const trimmed = search.trim();
+    if (trimmed === query) return;
+    const t = setTimeout(() => setQuery(trimmed), 300);
+    return () => clearTimeout(t);
+  }, [search, query]);
 
   const { data, isLoading } = useSWR(
     ['people', query],
@@ -178,9 +186,9 @@ export default function PeoplePage() {
 
   const users = data?.users ?? [];
 
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    setQuery(search.trim());
+  function clearSearch() {
+    setSearch('');
+    setQuery('');
   }
 
   return (
@@ -208,21 +216,33 @@ export default function PeoplePage() {
           {/* Left: user list */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col" style={{ maxHeight: 'calc(100vh - 140px)' }}>
             {/* Search */}
-            <form onSubmit={handleSearch} className="p-3 border-b border-gray-50">
-              <div className="flex gap-2">
+            <div className="p-3 border-b border-gray-50">
+              <div className="relative">
                 <input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search user_id or email…"
-                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-1.5
+                  className="w-full text-xs border border-gray-200 rounded-lg pl-3 pr-8 py-1.5
                              focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-50"
                 />
-                <button type="submit"
-                  className="text-xs bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-indigo-700">
-                  Go
-                </button>
+                {search && (
+                  <button
+                    onClick={clearSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400
+                               hover:text-gray-600 transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
               </div>
-            </form>
+              {query && (
+                <p className="text-[10px] text-gray-400 mt-1.5 px-0.5">
+                  {isLoading ? 'Searching…' : `${users.length} result${users.length !== 1 ? 's' : ''} for "${query}"`}
+                </p>
+              )}
+            </div>
 
             {/* List */}
             <div className="overflow-y-auto flex-1 p-2">
