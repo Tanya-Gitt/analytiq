@@ -36,6 +36,7 @@ Event tracking + e-commerce analytics in a single Docker Compose stack — no Sa
 - HMAC-signed webhooks and CSV import
 - Events timeline, top events, conversion funnel, new vs returning users chart
 - Per-event-type filtering with 7 / 30 / 90-day windows
+- **Retention cohort heatmap** — weekly cohort table, color-coded drop-off
 
 **Segment B — E-commerce analytics**
 - Revenue trend, AOV trend, top products, top channels (donut), revenue by region
@@ -43,11 +44,32 @@ Event tracking + e-commerce analytics in a single Docker Compose stack — no Sa
 - Per-channel filtering, delivery rate KPI
 - Orders via webhook, CSV upload, or Google Sheets polling
 
+**Custom Funnels** *(Phase 4)*
+- Build any multi-step user journey (up to 10 steps) with a drag-and-drop editor
+- Event name autocomplete from your live data
+- Ordered funnel algorithm: step N counts only users who completed all prior steps
+- 7 / 14 / 30 / 90-day windows, live chart with drop-off visualisation
+
+**Team collaboration** *(Phase 4)*
+- Invite teammates by email — shareable token link with 7-day expiry
+- Roles: `admin` (full control) and `viewer` (read-only dashboards)
+- Admin: invite, remove members, change roles; viewers cannot access settings
+- JWT role claims — role enforced at API layer on every request
+
+**Sharing & annotations** *(Phase 3)*
+- Public share links — share a read-only dashboard snapshot (Segment A or B) with anyone, no login required; optional expiry date
+- Chart annotations — pin notes to specific dates on any time-series chart; colour-coded reference lines
+
+**Live feed** *(Phase 2)*
+- Real-time SSE stream of incoming events — see every `track`, `page`, and `identify` call as it lands
+- Weekly email digest with key metrics
+
 **Platform**
 - Smart alerting — metric thresholds → Slack or email with auto-resolve
 - Multi-tenant by default — Postgres RLS enforces org isolation at the DB layer
 - Background sync scheduler — APScheduler polls connectors, evaluates alerts, recovers orphaned runs
 - Token-bucket rate limiting — 100 req/s per org, Postgres-backed, survives restarts
+- CSV export — download filtered event or order data as CSV directly from the dashboard
 - 258 tests, 0 mocks for DB — every test runs against a real Postgres instance
 
 ---
@@ -67,7 +89,7 @@ graph TD
             auth["🔐 Supabase GoTrue\nJWT issuer :9999"]
         end
 
-        db[("🐘 PostgreSQL :5432\nRow-Level Security\norgs · users · events · orders\nconnectors · alert_rules · sync_runs")]
+        db[("🐘 PostgreSQL :5432\nRow-Level Security\norgs · users · events · orders\nconnectors · alert_rules · sync_runs\nshare_tokens · annotations\norg_invites · funnels")]
 
         scheduler["🕐 APScheduler\nConnector polling (60s)\nAlert evaluation (60s)\nOrphan recovery (5m)"]
     end
@@ -225,27 +247,55 @@ Tests hit a real Postgres instance — no mocks for the database layer. Set `TES
 ```
 analytiq/
 ├── app/
-│   ├── routers/          # FastAPI route handlers (auth, dashboard, connectors, ingest, alerts, webhook)
-│   ├── connectors/       # CSV coercion + sync logic (coerce.py, sync.py)
-│   ├── deps.py           # RLS dependency injection — read before modifying!
-│   └── auth.py           # JWT utilities
+│   ├── routers/
+│   │   ├── auth.py           # Sign-up, login, /me, API key rotation
+│   │   ├── dashboard.py      # Segment A + B dashboard queries
+│   │   ├── connectors.py     # Connector CRUD, sync trigger, CSV upload
+│   │   ├── ingest.py         # JS SDK ingest endpoint + rate limiter
+│   │   ├── webhook.py        # HMAC-verified webhook receiver
+│   │   ├── alerts.py         # Alert rule CRUD
+│   │   ├── live.py           # SSE real-time event stream
+│   │   ├── share.py          # Public share token CRUD + data endpoint
+│   │   ├── annotations.py    # Chart annotation CRUD
+│   │   ├── team.py           # Team invites, member management  ← Phase 4
+│   │   └── funnels.py        # Custom funnel builder + query    ← Phase 4
+│   ├── connectors/           # CSV coercion + sync logic
+│   ├── notifications.py      # SMTP email helper (used by team invites)
+│   ├── deps.py               # RLS dependency injection — read before modifying!
+│   └── auth.py               # JWT utilities (create, verify, role claims)
 ├── scheduler/
-│   ├── main.py           # APScheduler polling loop
-│   ├── metrics.py        # Metric evaluation (revenue, events, delivery rate)
-│   └── alert_evaluator.py # Alert FSM (OK ↔ TRIGGERED, notifications)
+│   ├── main.py               # APScheduler polling loop
+│   ├── metrics.py            # Metric evaluation
+│   ├── alert_evaluator.py    # Alert FSM (OK ↔ TRIGGERED)
+│   └── notifications.py      # SMTP + Slack notification helpers
 ├── frontend/
-│   ├── src/app/          # Next.js App Router pages
-│   ├── src/components/   # Recharts dashboards, layout, UI primitives
-│   └── src/lib/          # Typed API client + auth helpers
+│   └── src/
+│       ├── app/
+│       │   ├── dashboard/    # Segment A + B dashboards (tabs)
+│       │   ├── connectors/   # Connector management UI
+│       │   ├── live/         # Real-time SSE live feed
+│       │   ├── funnels/      # Drag-and-drop funnel builder ← Phase 4
+│       │   ├── alerts/       # Alert rule management
+│       │   ├── settings/     # API key, team panel           ← Phase 4
+│       │   ├── invite/[token]/ # Accept-invite public page   ← Phase 4
+│       │   └── share/[token]/  # Public shared dashboard     ← Phase 3
+│       ├── components/
+│       │   ├── charts/       # Recharts wrappers (Revenue, Events, Funnel, Retention…)
+│       │   └── layout/       # AppShell, Sidebar, nav
+│       └── lib/
+│           ├── api.ts        # Fully typed API client
+│           └── auth.ts       # JWT storage helpers
 ├── sdk/
-│   └── analytics.js      # Browser JS SDK (identify, track, page)
+│   └── analytics.js          # Browser JS SDK (identify, track, page)
 ├── db/
-│   └── schema.sql        # PostgreSQL schema + RLS policies
+│   ├── schema.sql             # Core schema + RLS policies (Phase 1–3)
+│   └── migrations/
+│       └── 002_phase4.sql    # role column, org_invites, funnels tables
 ├── nginx/
-│   └── default.conf      # Reverse proxy + rate limiting + security headers
-├── tests/                # 258 pytest tests — real Postgres, no DB mocks
-├── docker-compose.yml    # Full 6-container stack
-└── .env.example          # Copy → .env, fill in 2 values, you're done
+│   └── default.conf          # Reverse proxy + rate limiting + security headers
+├── tests/                    # 258 pytest tests — real Postgres, no DB mocks
+├── docker-compose.yml        # Full 6-container stack
+└── .env.example              # Copy → .env, fill in 2 values, done
 ```
 
 ---
