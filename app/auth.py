@@ -35,16 +35,37 @@ def _get_secret() -> str:
     return secret
 
 
-def create_access_token(user_id: str, org_id: str) -> str:
+def create_access_token(user_id: str, org_id: str, role: str = "admin") -> str:
     """Issue a signed JWT for a user/org pair."""
     now = datetime.now(tz=timezone.utc)
     payload: dict[str, Any] = {
-        "sub": user_id,
+        "sub":    user_id,
         "org_id": org_id,
-        "iat": now,
-        "exp": now + timedelta(minutes=_ACCESS_TOKEN_EXPIRE_MINUTES),
+        "role":   role,
+        "iat":    now,
+        "exp":    now + timedelta(minutes=_ACCESS_TOKEN_EXPIRE_MINUTES),
     }
     return jwt.encode(payload, _get_secret(), algorithm=_ALGORITHM)
+
+
+def verify_jwt(token: str) -> dict[str, Any]:
+    """
+    Decode and validate a JWT. Returns the full payload dict.
+    Raises HTTP 401 on any validation failure.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="invalid or expired token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, _get_secret(), algorithms=[_ALGORITHM])
+    except JWTError:
+        raise credentials_exception
+
+    if not payload.get("org_id"):
+        raise credentials_exception
+    return payload
 
 
 def verify_jwt_get_org_id(token: str) -> UUID:

@@ -18,7 +18,7 @@ import asyncpg
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.auth import verify_jwt_get_org_id
+from app.auth import verify_jwt, verify_jwt_get_org_id
 from app.database import get_pool
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -109,6 +109,34 @@ async def get_org_db_by_api_key(
             yield conn
     finally:
         await pool.release(conn)
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> dict:
+    """
+    Lightweight dependency that extracts the full JWT payload (user_id, org_id, role)
+    without opening a DB connection.  Use when you need role information.
+    Returns a dict with keys: sub, org_id, role.
+    """
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="missing authorization header",
+        )
+    return verify_jwt(credentials.credentials)
+
+
+async def require_admin(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Dependency that raises 403 if the authenticated user is not an admin."""
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="admin role required",
+        )
+    return current_user
 
 
 async def get_org_id_from_jwt(

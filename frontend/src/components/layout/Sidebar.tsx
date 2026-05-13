@@ -38,6 +38,16 @@ const NAV = [
     ),
   },
   {
+    href: '/funnels',
+    label: 'Funnels',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M3 4h18l-7 8v5l-4 3V12L3 4z" />
+      </svg>
+    ),
+  },
+  {
     href: '/alerts',
     label: 'Alerts',
     icon: (

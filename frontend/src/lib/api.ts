@@ -405,3 +405,129 @@ export async function downloadExport(
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ── Team management ───────────────────────────────────────────────────────────
+
+export interface TeamMember {
+  id: string;
+  email: string;
+  role: 'admin' | 'viewer';
+  created_at: string;
+}
+
+export interface PendingInvite {
+  id: string;
+  email: string;
+  role: 'admin' | 'viewer';
+  expires_at: string;
+  created_at: string;
+}
+
+export interface TeamResponse {
+  members: TeamMember[];
+  pending_invites: PendingInvite[];
+}
+
+export function getTeam() {
+  return request<TeamResponse>('/team/members');
+}
+
+export function inviteMember(email: string, role: 'admin' | 'viewer' = 'viewer') {
+  return request<{ id: string; email: string; role: string; invite_url: string }>(
+    '/team/invite',
+    { method: 'POST', body: JSON.stringify({ email, role }) },
+  );
+}
+
+export function removeMember(userId: string) {
+  return request<void>(`/team/members/${userId}`, { method: 'DELETE' });
+}
+
+export function updateMemberRole(userId: string, role: 'admin' | 'viewer') {
+  return request<TeamMember>(`/team/members/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  });
+}
+
+export function cancelInvite(inviteId: string) {
+  return request<void>(`/team/invites/${inviteId}`, { method: 'DELETE' });
+}
+
+/** Public — no auth */
+export function getInvite(token: string) {
+  return fetch(`${BASE}/invite/${token}`).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, body?.detail ?? `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<{ id: string; email: string; role: string; org_name: string }>;
+  });
+}
+
+/** Public — no auth */
+export function acceptInvite(token: string, password: string) {
+  return fetch(`${BASE}/invite/${token}/accept`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  }).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, body?.detail ?? `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<{ access_token: string; org_id: string }>;
+  });
+}
+
+// ── Custom funnels ────────────────────────────────────────────────────────────
+
+export interface Funnel {
+  id: string;
+  name: string;
+  steps: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FunnelStep {
+  step: string;
+  users: number;
+}
+
+export interface FunnelData {
+  funnel_id: string;
+  name: string;
+  steps: FunnelStep[];
+  days: number;
+}
+
+export function listFunnels() {
+  return request<Funnel[]>('/funnels');
+}
+
+export function createFunnel(name: string, steps: string[]) {
+  return request<Funnel>('/funnels', {
+    method: 'POST',
+    body: JSON.stringify({ name, steps }),
+  });
+}
+
+export function updateFunnel(id: string, patch: { name?: string; steps?: string[] }) {
+  return request<Funnel>(`/funnels/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteFunnel(id: string) {
+  return request<void>(`/funnels/${id}`, { method: 'DELETE' });
+}
+
+export function getFunnelData(id: string, days = 30) {
+  return request<FunnelData>(`/funnels/${id}/data?days=${days}`);
+}
+
+export function listFunnelEvents() {
+  return request<string[]>('/funnels/events');
+}

@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, field_validator
 
-from app.auth import create_access_token, verify_jwt_get_org_id
+from app.auth import create_access_token, verify_jwt, verify_jwt_get_org_id
 from app.database import get_pool
 
 # Account lockout constants
@@ -107,15 +107,15 @@ async def signup(body: SignupRequest, pool: asyncpg.Pool = Depends(get_pool)):
             )
             org_id = str(org["id"])
 
-            # Create user
+            # Create user (first user in org is always admin)
             user = await conn.fetchrow(
-                "INSERT INTO users (org_id, email, password_hash) VALUES ($1, $2, $3) RETURNING id",
+                "INSERT INTO users (org_id, email, password_hash, role) VALUES ($1, $2, $3, 'admin') RETURNING id, role",
                 org["id"],
                 body.email,
                 password_hash,
             )
 
-    token = create_access_token(user_id=str(user["id"]), org_id=org_id)
+    token = create_access_token(user_id=str(user["id"]), org_id=org_id, role=user["role"])
     return TokenResponse(access_token=token, org_id=org_id, api_key=org["api_key"])
 
 
@@ -143,7 +143,7 @@ async def login(body: LoginRequest, pool: asyncpg.Pool = Depends(get_pool)):
             row = await conn.fetchrow(
                 """
                 SELECT u.id, u.org_id, u.password_hash, u.failed_login_attempts,
-                       u.locked_until, o.api_key
+                       u.locked_until, u.role, o.api_key
                 FROM users u
                 JOIN orgs o ON o.id = u.org_id
                 WHERE u.email = $1
@@ -191,7 +191,7 @@ async def login(body: LoginRequest, pool: asyncpg.Pool = Depends(get_pool)):
             )
 
     token = create_access_token(
-        user_id=str(row["id"]), org_id=str(row["org_id"])
+        user_id=str(row["id"]), org_id=str(row["org_id"]), role=row["role"]
     )
     return TokenResponse(
         access_token=token,
@@ -209,22 +209,24 @@ async def me(
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="not authenticated")
-    org_id = verify_jwt_get_org_id(credentials.credentials)
+    jwt_payload = verify_jwt(credentials.credentials)
+    org_id  = jwt_payload["org_id"]
+    user_id = jwt_payload.get("sub")
     async with pool.acquire() as conn:
         async with conn.transaction():
-            # app_user has NOINHERIT — must SET ROLE to access tables granted
-            # to app_role.  SET LOCAL app.org_id so RLS policies on users fire.
             await conn.execute("SET LOCAL ROLE app_role")
             await conn.execute(f"SET LOCAL app.org_id = '{org_id}'")
             row = await conn.fetchrow(
                 """
-                SELECT u.id, u.email, o.name AS org_name, o.api_key
+                SELECT u.id, u.email, u.role, o.name AS org_name, o.api_key
                 FROM   users u
                 JOIN   orgs  o ON o.id = u.org_id
                 WHERE  u.org_id = $1
+                  AND  u.id     = $2::uuid
                 LIMIT  1
                 """,
                 org_id,
+                user_id,
             )
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
@@ -232,6 +234,7 @@ async def me(
     return {
         "user_id":  str(row["id"]),
         "email":    row["email"],
+        "role":     row["role"],
         "org_name": row["org_name"],
         "api_key":  row["api_key"],
     }
