@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash          TEXT NOT NULL,      -- bcrypt
   failed_login_attempts  INT  NOT NULL DEFAULT 0,
   locked_until           TIMESTAMPTZ,        -- NULL = not locked
+  role                   TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('admin', 'viewer')),
   created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS users_org ON users(org_id);
@@ -198,6 +199,46 @@ AS $$
 $$;
 
 -- ──────────────────────────────────────────────
+-- Team invites
+-- token: 32-char hex (128-bit entropy), used as the invite URL credential
+-- accepted_at: NULL = still pending; set on accept
+-- ──────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS org_invites (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id      UUID        NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  email       TEXT        NOT NULL,
+  role        TEXT        NOT NULL DEFAULT 'viewer' CHECK (role IN ('admin', 'viewer')),
+  token       TEXT        NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex'),
+  invited_by  UUID        REFERENCES users(id) ON DELETE SET NULL,
+  accepted_at TIMESTAMPTZ,
+  expires_at  TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '7 days',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS org_invites_org   ON org_invites(org_id);
+CREATE INDEX IF NOT EXISTS org_invites_token ON org_invites(token);
+CREATE INDEX IF NOT EXISTS org_invites_email ON org_invites(email);
+
+ALTER TABLE org_invites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE org_invites FORCE ROW LEVEL SECURITY;
+
+-- ──────────────────────────────────────────────
+-- Custom funnels
+-- steps: ordered JSONB array of event name strings
+-- ──────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS funnels (
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id     UUID        NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  name       TEXT        NOT NULL CHECK (char_length(name) BETWEEN 1 AND 120),
+  steps      JSONB       NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS funnels_org ON funnels(org_id);
+
+ALTER TABLE funnels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE funnels FORCE ROW LEVEL SECURITY;
+
+-- ──────────────────────────────────────────────
 -- Row-Level Security
 -- All tenant tables are isolated by org_id.
 -- SET LOCAL app.org_id = '<uuid>' must be called inside every transaction
@@ -243,6 +284,29 @@ DO $$ BEGIN
     USING (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
   CREATE POLICY org_isolation ON sync_runs
     USING (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
+
+  -- org_invites: SELECT is open when no org context (public invite token lookup);
+  --              restricted to owning org when context is set.
+  DROP POLICY IF EXISTS org_invites_select ON org_invites;
+  DROP POLICY IF EXISTS org_invites_insert ON org_invites;
+  DROP POLICY IF EXISTS org_invites_update ON org_invites;
+  DROP POLICY IF EXISTS org_invites_delete ON org_invites;
+  CREATE POLICY org_invites_select ON org_invites FOR SELECT
+    USING (
+      NULLIF(current_setting('app.org_id', true), '') IS NULL
+      OR org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
+    );
+  CREATE POLICY org_invites_insert ON org_invites FOR INSERT
+    WITH CHECK (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
+  CREATE POLICY org_invites_update ON org_invites FOR UPDATE
+    USING (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid)
+    WITH CHECK (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
+  CREATE POLICY org_invites_delete ON org_invites FOR DELETE
+    USING (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
+
+  DROP POLICY IF EXISTS org_isolation ON funnels;
+  CREATE POLICY org_isolation ON funnels
+    USING (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
 END $$;
 
 -- ──────────────────────────────────────────────
@@ -261,6 +325,8 @@ END $$;
 GRANT USAGE ON SCHEMA public TO app_role;
 -- Data-level access — covers all tables created above in this file
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON org_invites TO app_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON funnels     TO app_role;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app_role;
 -- rate_limits is not RLS-protected but app_role still needs access (covered above,
 -- re-stated here for documentation clarity).

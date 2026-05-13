@@ -127,6 +127,7 @@ jobs:
         run: |
           echo "POSTGRES_PASSWORD=ci_password_$(openssl rand -hex 8)" >> .env
           echo "JWT_SECRET=ci_jwt_secret_$(openssl rand -hex 16)"    >> .env
+          echo "APP_DB_PASSWORD=ci_app_db_$(openssl rand -hex 8)"    >> .env
 
       - name: Build and start stack
         run: docker compose up --build -d

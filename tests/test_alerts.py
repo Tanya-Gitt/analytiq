@@ -16,11 +16,10 @@ import pytest
 from scheduler.alert_evaluator import (
     _condition_met,
     _notify,
-    _send_email_sync,
-    _send_slack,
     _should_refire,
     evaluate_alerts,
 )
+from scheduler.notifications import _send_email_sync, send_slack as _send_slack
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -102,7 +101,7 @@ class TestOkToTriggered:
             metric="order_count", condition="below", threshold=10.0,
         )
 
-        with patch("scheduler.alert_evaluator._send_slack", new_callable=AsyncMock) as mock_slack:
+        with patch("scheduler.alert_evaluator.send_slack", new_callable=AsyncMock) as mock_slack:
             await evaluate_alerts(db_pool)
 
         rule = await _get_rule_state(db_pool, rule_id)
@@ -130,7 +129,7 @@ class TestTriggeredToOk:
         )
         await _seed_orders(db_pool, org_a.org_id, 15)
 
-        with patch("scheduler.alert_evaluator._send_slack", new_callable=AsyncMock) as mock_slack:
+        with patch("scheduler.alert_evaluator.send_slack", new_callable=AsyncMock) as mock_slack:
             await evaluate_alerts(db_pool)
 
         rule = await _get_rule_state(db_pool, rule_id)
@@ -153,7 +152,7 @@ class TestRefire:
             last_triggered_at=datetime.now(timezone.utc) - timedelta(hours=1),
         )
 
-        with patch("scheduler.alert_evaluator._send_slack", new_callable=AsyncMock) as mock_slack:
+        with patch("scheduler.alert_evaluator.send_slack", new_callable=AsyncMock) as mock_slack:
             await evaluate_alerts(db_pool)
 
         mock_slack.assert_not_called()
@@ -170,7 +169,7 @@ class TestRefire:
             last_triggered_at=datetime.now(timezone.utc) - timedelta(hours=25),
         )
 
-        with patch("scheduler.alert_evaluator._send_slack", new_callable=AsyncMock) as mock_slack:
+        with patch("scheduler.alert_evaluator.send_slack", new_callable=AsyncMock) as mock_slack:
             await evaluate_alerts(db_pool)
 
         mock_slack.assert_called_once()
@@ -190,7 +189,7 @@ class TestNoDataCondition:
             metric="revenue_total", condition="no_data", threshold=None,
         )
 
-        with patch("scheduler.alert_evaluator._send_slack", new_callable=AsyncMock) as mock_slack:
+        with patch("scheduler.alert_evaluator.send_slack", new_callable=AsyncMock) as mock_slack:
             await evaluate_alerts(db_pool)
 
         rule = await _get_rule_state(db_pool, rule_id)
@@ -217,7 +216,7 @@ class TestNoDataCondition:
                     org_a.org_id,
                 )
 
-        with patch("scheduler.alert_evaluator._send_slack", new_callable=AsyncMock) as mock_slack:
+        with patch("scheduler.alert_evaluator.send_slack", new_callable=AsyncMock) as mock_slack:
             await evaluate_alerts(db_pool)
 
         rule = await _get_rule_state(db_pool, rule_id)
@@ -473,7 +472,7 @@ class TestNotify:
             "channel": "email",
             "destination": "user@example.com",
         }
-        with patch("scheduler.alert_evaluator._send_email_sync"):
+        with patch("scheduler.notifications._send_email_sync"):
             # run_in_executor calls the function synchronously via the mock
             with patch("asyncio.get_event_loop") as mock_loop:
                 mock_loop.return_value.run_in_executor = AsyncMock(return_value=None)

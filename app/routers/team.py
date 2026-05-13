@@ -13,7 +13,6 @@ POST   /api/invite/{token}/accept — create account and join the org
 
 from __future__ import annotations
 
-import secrets
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -22,9 +21,9 @@ import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, field_validator
 
-from app.database import get_pool
-from app.deps import get_current_user, get_org_db, require_admin
 from app.auth import create_access_token
+from app.database import get_pool
+from app.deps import get_org_db, require_admin
 from app.notifications import send_email
 
 router = APIRouter()
