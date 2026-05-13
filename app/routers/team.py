@@ -21,6 +21,7 @@ import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, field_validator
 
+from app.audit_log import log_action
 from app.auth import create_access_token
 from app.database import get_pool
 from app.deps import get_org_db, require_admin
@@ -135,6 +136,10 @@ async def invite_member(
     except Exception:
         pass  # Email failure doesn't block the invite being created
 
+    await log_action(db, user_id, "member.invited",
+                     resource_type="user", resource_id=str(row["id"]),
+                     metadata={"email": body.email, "role": body.role})
+
     return {
         "id":         str(row["id"]),
         "email":      row["email"],
@@ -201,12 +206,14 @@ async def remove_member(
     """Remove a member from the org. Cannot remove yourself."""
     if str(member_id) == current_user["sub"]:
         raise HTTPException(400, "cannot remove yourself")
-    result = await db.execute(
-        "DELETE FROM users WHERE id = $1",
-        member_id,
+    removed = await db.fetchrow(
+        "DELETE FROM users WHERE id = $1 RETURNING email", member_id
     )
-    if result == "DELETE 0":
+    if removed is None:
         raise HTTPException(404, "member not found")
+    await log_action(db, current_user["sub"], "member.removed",
+                     resource_type="user", resource_id=str(member_id),
+                     metadata={"email": removed["email"]})
 
 
 @router.patch("/team/members/{member_id}")
@@ -225,6 +232,9 @@ async def update_member_role(
     )
     if row is None:
         raise HTTPException(404, "member not found")
+    await log_action(db, current_user["sub"], "member.role_changed",
+                     resource_type="user", resource_id=str(member_id),
+                     metadata={"email": row["email"], "new_role": body.role})
     return {"id": str(row["id"]), "email": row["email"], "role": row["role"]}
 
 

@@ -27,6 +27,7 @@ from app.database import close_pool, create_pool
 from app.routers import alerts as alerts_router
 from app.routers import annotations as annotations_router
 from app.routers import anomalies as anomalies_router
+from app.routers import audit as audit_router
 from app.routers import auth as auth_router
 from app.routers import churn as churn_router
 from app.routers import connectors as connectors_router
@@ -35,12 +36,14 @@ from app.routers import dashboard as dashboard_router
 from app.routers import export as export_router
 from app.routers import flags as flags_router
 from app.routers import funnels as funnels_router
+from app.routers import gdpr as gdpr_router
 from app.routers import heatmaps as heatmaps_router
 from app.routers import ingest as ingest_router
 from app.routers import people as people_router
 from app.routers import setup as setup_router
 from app.routers import share as share_router
 from app.routers import sso as sso_router
+from app.routers import storage as storage_router
 from app.routers import stream as stream_router
 from app.routers import team as team_router
 from app.routers import warehouse as warehouse_router
@@ -100,6 +103,9 @@ app.include_router(heatmaps_router.router,    prefix="/api",      tags=["heatmap
 app.include_router(people_router.router,      prefix="/api",      tags=["people"])
 app.include_router(setup_router.router,       prefix="/api",      tags=["setup"])
 app.include_router(warehouse_router.router,   prefix="/api",      tags=["warehouse"])
+app.include_router(gdpr_router.router,        prefix="/api",      tags=["gdpr"])
+app.include_router(audit_router.router,       prefix="/api",      tags=["audit"])
+app.include_router(storage_router.router,     prefix="/api",      tags=["storage"])
 
 # ── Static: JS SDK ────────────────────────────────────────────────────────────
 # Serves sdk/analytics.js at /sdk/analytics.js

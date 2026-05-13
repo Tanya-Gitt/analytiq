@@ -183,18 +183,89 @@ client.track('purchase',
   properties: { sku: 'PROD-1', price: 29.99 })
 client.identify('u_123', email: 'alice@example.com', plan: 'pro')
 client.page(user_id: 'u_123', properties: { url: '/checkout' })`,
+
+    Swift: `// Add analytiq.swift to your Xcode project
+// Requires: iOS 13+, macOS 10.15+
+
+// AppDelegate.swift / @main
+import UIKit
+
+@main class AppDelegate: UIResponder, UIApplicationDelegate {
+  func application(_ application: UIApplication,
+    didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    Analytiq.configure(apiKey: "${apiKey}", host: "${host}")
+    return true
+  }
+}
+
+// Anywhere in your app:
+Analytiq.identify("user-123", traits: ["email": "alice@example.com", "plan": "pro"])
+Analytiq.track("purchase", properties: ["sku": "PROD-1", "price": 29.99])
+Analytiq.page("Checkout")`,
+
+    Kotlin: `// Add Analytiq.kt to your Android project
+// Requires: Android API 21+, Kotlin 1.9+, coroutines
+
+// Application class:
+class MyApp : Application() {
+  override fun onCreate() {
+    super.onCreate()
+    Analytiq.configure(this, apiKey = "${apiKey}", host = "${host}")
+  }
+}
+
+// Anywhere in your app:
+Analytiq.identify("user-123", mapOf("email" to "alice@example.com", "plan" to "pro"))
+Analytiq.track("purchase", mapOf("sku" to "PROD-1", "price" to 29.99))
+Analytiq.screen("Checkout")`,
+
+    'React Native': `// Copy analytiq_react_native.ts into your project
+// Requires: React Native 0.72+, @react-native-async-storage/async-storage
+
+// App.tsx:
+import Analytiq from './analytiq_react_native';
+
+await Analytiq.configure({ apiKey: '${apiKey}', host: '${host}' });
+
+Analytiq.identify('user-123', { email: 'alice@example.com', plan: 'pro' });
+Analytiq.track('purchase', { sku: 'PROD-1', price: 29.99 });
+Analytiq.screen('Checkout');`,
+
+    Flutter: `// Add analytiq_flutter.dart + http + shared_preferences to your project
+// pubspec.yaml:
+//   dependencies:
+//     http: ^1.2.0
+//     shared_preferences: ^2.3.0
+
+// main.dart:
+import 'analytiq_flutter.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Analytiq.configure(apiKey: '${apiKey}', host: '${host}');
+  runApp(const MyApp());
+}
+
+// Anywhere in your app:
+Analytiq.identify('user-123', traits: {'email': 'alice@example.com', 'plan': 'pro'});
+Analytiq.track('purchase', properties: {'sku': 'PROD-1', 'price': 29.99});
+Analytiq.screen('Checkout');`,
   };
 }
 
-const LANGS = ['Browser', 'Python', 'Node.js', 'Go', 'Ruby'] as const;
+const LANGS = ['Browser', 'Python', 'Node.js', 'Go', 'Ruby', 'Swift', 'Kotlin', 'React Native', 'Flutter'] as const;
 type Lang = typeof LANGS[number];
 
 const LANG_COLORS: Record<Lang, string> = {
-  Browser: 'text-yellow-400',
-  Python:  'text-blue-400',
-  'Node.js': 'text-green-400',
-  Go:      'text-cyan-400',
-  Ruby:    'text-red-400',
+  Browser:        'text-yellow-400',
+  Python:         'text-blue-400',
+  'Node.js':      'text-green-400',
+  Go:             'text-cyan-400',
+  Ruby:           'text-red-400',
+  Swift:          'text-orange-400',
+  Kotlin:         'text-purple-400',
+  'React Native': 'text-sky-400',
+  Flutter:        'text-teal-400',
 };
 
 // ── Status badge ──────────────────────────────────────────────────────────────

@@ -790,6 +790,123 @@ export function getWarehouseStats() {
   return request<WarehouseStats>('/warehouse/stats');
 }
 
+// ── GDPR ──────────────────────────────────────────────────────────────────────
+
+export interface GdprOptOut {
+  user_id:      string;
+  opted_out_at: string;
+}
+
+export interface GdprExport {
+  user_id:      string;
+  opted_out:    boolean;
+  total_events: number;
+  events: Array<{
+    event_name:   string;
+    properties:   Record<string, unknown>;
+    received_at:  string;
+    anonymous_id: string | null;
+  }>;
+}
+
+export function listOptOuts() {
+  return request<GdprOptOut[]>('/gdpr/opt-outs');
+}
+
+export function gdprExport(userId: string) {
+  return request<GdprExport>(`/gdpr/export/${encodeURIComponent(userId)}`);
+}
+
+export function gdprOptOut(userId: string) {
+  return request<{ user_id: string; opted_out: boolean }>('/gdpr/opt-out', {
+    method: 'POST',
+    body:   JSON.stringify({ user_id: userId }),
+  });
+}
+
+export function gdprRemoveOptOut(userId: string) {
+  return request<{ user_id: string; opted_out: boolean }>(
+    `/gdpr/opt-out/${encodeURIComponent(userId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export function gdprForget(userId: string) {
+  return request<{ user_id: string; events_deleted: number; forgotten: boolean }>(
+    `/gdpr/forget/${encodeURIComponent(userId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+// ── Audit Log ─────────────────────────────────────────────────────────────────
+
+export interface AuditEntry {
+  id:            string;
+  actor_email:   string;
+  action:        string;
+  resource_type: string | null;
+  resource_id:   string | null;
+  metadata:      Record<string, unknown>;
+  created_at:    string;
+}
+
+export interface AuditPage {
+  entries: AuditEntry[];
+  total:   number;
+  limit:   number;
+  offset:  number;
+}
+
+export function listAudit(params: { category?: string; limit?: number; offset?: number } = {}) {
+  const p = new URLSearchParams();
+  if (params.category) p.set('category', params.category);
+  if (params.limit)    p.set('limit',    String(params.limit));
+  if (params.offset)   p.set('offset',   String(params.offset));
+  return request<AuditPage>(`/audit?${p}`);
+}
+
+// ── Storage ───────────────────────────────────────────────────────────────────
+
+export interface StorageStats {
+  hot_events:          number;
+  archived_events:     number;
+  total_events:        number;
+  oldest_hot:          string | null;
+  oldest_archived:     string | null;
+  estimated_hot_mb:    number;
+  estimated_archive_mb: number;
+}
+
+export interface ArchivedEvent {
+  event_name:  string;
+  user_id:     string | null;
+  properties:  Record<string, unknown>;
+  received_at: string;
+  archived_at: string;
+}
+
+export function getStorageStats() {
+  return request<StorageStats>('/storage/stats');
+}
+
+export function archiveEvents(olderThanDays: number) {
+  return request<{ events_archived: number; older_than_days: number }>('/storage/archive', {
+    method: 'POST',
+    body:   JSON.stringify({ older_than_days: olderThanDays }),
+  });
+}
+
+export function listArchivedEvents(params: {
+  user_id?: string; event_name?: string; limit?: number; offset?: number;
+} = {}) {
+  const p = new URLSearchParams();
+  if (params.user_id)    p.set('user_id',    params.user_id);
+  if (params.event_name) p.set('event_name', params.event_name);
+  if (params.limit)      p.set('limit',      String(params.limit));
+  if (params.offset)     p.set('offset',     String(params.offset));
+  return request<ArchivedEvent[]>(`/storage/archived?${p}`);
+}
+
 export async function downloadWarehouseExport(
   dataset: 'events' | 'orders' | 'users',
   opts: { since?: string; until?: string; fmt?: 'json' | 'csv'; limit?: number } = {},

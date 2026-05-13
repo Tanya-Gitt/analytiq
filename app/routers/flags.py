@@ -18,7 +18,8 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.deps import get_org_db
+from app.audit_log import log_action
+from app.deps import get_current_user, get_org_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -140,8 +141,9 @@ async def list_flags(db: asyncpg.Connection = Depends(get_org_db)):
 
 @router.post("/flags", status_code=201)
 async def create_flag(
-    body: FlagCreate,
-    db:   asyncpg.Connection = Depends(get_org_db),
+    body:         FlagCreate,
+    db:           asyncpg.Connection = Depends(get_org_db),
+    current_user: dict = Depends(get_current_user),
 ):
     try:
         row = await db.fetchrow(
@@ -155,14 +157,18 @@ async def create_flag(
         )
     except asyncpg.UniqueViolationError:
         raise HTTPException(409, f"Flag '{body.name}' already exists")
+    await log_action(db, current_user["sub"], "flag.created",
+                     resource_type="flag", resource_id=str(row["id"]),
+                     metadata={"name": body.name})
     return _row_to_flag(row)
 
 
 @router.patch("/flags/{flag_id}")
 async def update_flag(
-    flag_id: str,
-    body:    FlagPatch,
-    db:      asyncpg.Connection = Depends(get_org_db),
+    flag_id:      str,
+    body:         FlagPatch,
+    db:           asyncpg.Connection = Depends(get_org_db),
+    current_user: dict = Depends(get_current_user),
 ):
     existing = await db.fetchrow(
         "SELECT * FROM feature_flags WHERE id = $1::uuid", flag_id
@@ -184,19 +190,27 @@ async def update_flag(
         """,
         flag_id, enabled, rollout_pct, description, targeting,
     )
+    await log_action(db, current_user["sub"], "flag.updated",
+                     resource_type="flag", resource_id=flag_id,
+                     metadata={"name": row["name"], "enabled": enabled, "rollout_pct": rollout_pct})
     return _row_to_flag(row)
 
 
 @router.delete("/flags/{flag_id}", status_code=204)
 async def delete_flag(
-    flag_id: str,
-    db:      asyncpg.Connection = Depends(get_org_db),
+    flag_id:      str,
+    db:           asyncpg.Connection = Depends(get_org_db),
+    current_user: dict = Depends(get_current_user),
 ):
+    existing = await db.fetchrow("SELECT name FROM feature_flags WHERE id = $1::uuid", flag_id)
     result = await db.execute(
         "DELETE FROM feature_flags WHERE id = $1::uuid", flag_id
     )
     if result == "DELETE 0":
         raise HTTPException(404, "Flag not found")
+    await log_action(db, current_user["sub"], "flag.deleted",
+                     resource_type="flag", resource_id=flag_id,
+                     metadata={"name": existing["name"] if existing else ""})
 
 
 @router.post("/flags/evaluate")

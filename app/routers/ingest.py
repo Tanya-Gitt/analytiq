@@ -199,6 +199,15 @@ async def ingest_event(
 
     event_name = body.event or body.type
 
+    # GDPR: silently drop events for opted-out users
+    if body.userId:
+        opted_out = await db.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM gdpr_opt_outs WHERE user_id = $1)",
+            body.userId,
+        )
+        if opted_out:
+            return {"ok": True}
+
     await db.execute(
         """
         INSERT INTO events (org_id, event_name, user_id, anonymous_id, properties)
