@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent, useEffect } from 'react';
+import { Suspense, useState, FormEvent, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { login, ApiError } from '@/lib/api';
@@ -71,7 +71,7 @@ function GitHubIcon() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function LoginPage() {
+function LoginInner() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const [email,    setEmail]    = useState('');
@@ -181,5 +181,17 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <LoginInner />
+    </Suspense>
   );
 }
