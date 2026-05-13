@@ -2,15 +2,16 @@
 
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer,
+  Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import type { EventsTimelinePoint } from '@/lib/api';
+import type { EventsTimelinePoint, Annotation } from '@/lib/api';
 
 interface Props {
   data: EventsTimelinePoint[];
+  annotations?: Annotation[];
 }
 
-export default function EventsChart({ data }: Props) {
+export default function EventsChart({ data, annotations = [] }: Props) {
   if (!data.length) {
     return (
       <div className="h-48 flex items-center justify-center text-sm text-gray-400">
@@ -40,6 +41,21 @@ export default function EventsChart({ data }: Props) {
           formatter={(v: number) => [v.toLocaleString(), 'Events']}
           contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
         />
+        {annotations.map(ann => (
+          <ReferenceLine
+            key={ann.id}
+            x={ann.date}
+            stroke={ann.color}
+            strokeWidth={2}
+            strokeDasharray="4 2"
+            label={{
+              value: ann.label,
+              position: 'insideTopRight',
+              fontSize: 10,
+              fill: ann.color,
+            }}
+          />
+        ))}
         <Bar dataKey="count" fill="#6366f1" radius={[3, 3, 0, 0]} maxBarSize={40} />
       </BarChart>
     </ResponsiveContainer>

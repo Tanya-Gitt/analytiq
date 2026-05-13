@@ -13,7 +13,13 @@ import TopEventsChart from '@/components/charts/TopEventsChart';
 import FunnelChart from '@/components/charts/FunnelChart';
 import NewVsReturningChart from '@/components/charts/NewVsReturningChart';
 import RetentionCohortChart from '@/components/charts/RetentionCohortChart';
-import { getSegmentBDashboard, getSegmentADashboard, getRetention, downloadExport, ApiError } from '@/lib/api';
+import ShareModal from '@/components/ShareModal';
+import AnnotationsPanel from '@/components/AnnotationsPanel';
+import {
+  getSegmentBDashboard, getSegmentADashboard, getRetention,
+  listAnnotations, downloadExport, ApiError,
+  type Annotation,
+} from '@/lib/api';
 
 const DAYS_OPTIONS = [7, 14, 30, 90, 180, 365];
 
@@ -29,7 +35,6 @@ function money(v: number) {
   return `$${v.toFixed(2)}`;
 }
 
-/** % change from prev to curr; null when prev is 0 (no basis for comparison) */
 function changePct(curr: number, prev: number): number | null {
   if (prev === 0) return null;
   return ((curr - prev) / prev) * 100;
@@ -41,7 +46,7 @@ interface StatCardProps {
   label: string;
   value: string;
   sub?: string;
-  change?: number | null; // % change vs prior period
+  change?: number | null;
 }
 
 function StatCard({ label, value, sub, change }: StatCardProps) {
@@ -56,9 +61,7 @@ function StatCard({ label, value, sub, change }: StatCardProps) {
         {hasChange && (
           <span
             className={`text-xs font-semibold mb-0.5 px-1.5 py-0.5 rounded-full ${
-              positive
-                ? 'bg-green-50 text-green-700'
-                : 'bg-red-50 text-red-600'
+              positive ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
             }`}
           >
             {positive ? '↑' : '↓'} {Math.abs(change!).toFixed(1)}%
@@ -72,38 +75,20 @@ function StatCard({ label, value, sub, change }: StatCardProps) {
 
 // ── Filter dropdown ───────────────────────────────────────────────────────────
 
-function FilterSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (v: string) => void;
+function FilterSelect({ label, value, options, onChange }: {
+  label: string; value: string; options: string[]; onChange: (v: string) => void;
 }) {
   return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      className="input w-auto text-sm py-1.5"
-    >
+    <select value={value} onChange={e => onChange(e.target.value)} className="input w-auto text-sm py-1.5">
       <option value="">{label}</option>
-      {options.map(o => (
-        <option key={o} value={o}>{o}</option>
-      ))}
+      {options.map(o => <option key={o} value={o}>{o}</option>)}
     </select>
   );
 }
 
 // ── Export button ─────────────────────────────────────────────────────────────
 
-function ExportButton({
-  segment,
-  days,
-  filter,
-}: {
+function ExportButton({ segment, days, filter }: {
   segment: 'segment-a' | 'segment-b';
   days: number;
   filter?: { channel?: string; event_type?: string };
@@ -112,34 +97,27 @@ function ExportButton({
   const [error,   setError]   = useState('');
 
   async function handleExport() {
-    setLoading(true);
-    setError('');
-    try {
-      await downloadExport(segment, days, filter);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Export failed');
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true); setError('');
+    try { await downloadExport(segment, days, filter); }
+    catch (err) { setError(err instanceof ApiError ? err.message : 'Export failed'); }
+    finally { setLoading(false); }
   }
 
   return (
     <div className="flex items-center gap-2">
       <button
-        onClick={handleExport}
-        disabled={loading}
+        onClick={handleExport} disabled={loading}
         className="flex items-center gap-1.5 text-xs font-medium text-gray-600
                    border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50
                    disabled:opacity-50 transition-colors"
         title="Download as CSV"
       >
-        {loading ? (
-          <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-        ) : (
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
-        )}
+        {loading
+          ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+          : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+        }
         Export CSV
       </button>
       {error && <span className="text-xs text-red-500">{error}</span>}
@@ -151,6 +129,7 @@ function ExportButton({
 
 function SegmentBDashboard({ days }: { days: number }) {
   const [channel, setChannel] = useState('');
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
 
   const { data, error, isLoading } = useSWR(
     ['segment-b', days, channel],
@@ -158,12 +137,18 @@ function SegmentBDashboard({ days }: { days: number }) {
     { refreshInterval: 60_000 },
   );
 
+  // Load annotations once
+  useSWR('annotations-B', () => listAnnotations('B'), {
+    onSuccess: (data) => setAnnotations(data),
+    revalidateOnFocus: false,
+  });
+
   if (isLoading) return <DashboardSkeleton cols={3} />;
   if (error)     return <ErrorBanner message={error.message} />;
   if (!data)     return null;
 
-  const revChange   = changePct(data.total_revenue, data.prev_total_revenue);
-  const ordChange   = changePct(data.total_orders,  data.prev_total_orders);
+  const revChange = changePct(data.total_revenue, data.prev_total_revenue);
+  const ordChange = changePct(data.total_orders,  data.prev_total_orders);
 
   return (
     <div className="space-y-6">
@@ -173,51 +158,32 @@ function SegmentBDashboard({ days }: { days: number }) {
           {data.available_channels.length > 0 && (
             <>
               <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Filter:</span>
-              <FilterSelect
-                label="All channels"
-                value={channel}
-                options={data.available_channels}
-                onChange={setChannel}
-              />
-              {channel && (
-                <button
-                  onClick={() => setChannel('')}
-                  className="text-xs text-brand-600 hover:underline"
-                >
-                  Clear
-                </button>
-              )}
+              <FilterSelect label="All channels" value={channel} options={data.available_channels} onChange={setChannel} />
+              {channel && <button onClick={() => setChannel('')} className="text-xs text-brand-600 hover:underline">Clear</button>}
             </>
           )}
         </div>
-        <ExportButton
-          segment="segment-b"
-          days={days}
-          filter={channel ? { channel } : undefined}
-        />
+        <ExportButton segment="segment-b" days={days} filter={channel ? { channel } : undefined} />
       </div>
 
       {/* KPI row */}
       <div className="grid grid-cols-3 gap-4">
-        <StatCard
-          label="Total Revenue"
-          value={money(data.total_revenue)}
-          sub={`${days}d`}
-          change={revChange}
-        />
-        <StatCard
-          label="Orders"
-          value={data.total_orders.toLocaleString()}
-          change={ordChange}
-        />
-        <StatCard label="Delivery Rate" value={pct(data.delivery_rate)} />
+        <StatCard label="Total Revenue"  value={money(data.total_revenue)} sub={`${days}d`} change={revChange} />
+        <StatCard label="Orders"         value={data.total_orders.toLocaleString()} change={ordChange} />
+        <StatCard label="Delivery Rate"  value={pct(data.delivery_rate)} />
       </div>
 
-      {/* Charts row 1 */}
+      {/* Revenue trend + annotations */}
       <div className="grid grid-cols-2 gap-6">
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Revenue trend</h3>
-          <RevenueChart data={data.revenue_trend} />
+          <RevenueChart data={data.revenue_trend} annotations={annotations} />
+          <AnnotationsPanel
+            segment="B"
+            annotations={annotations}
+            onAdd={a => setAnnotations(prev => [...prev, a].sort((x, y) => x.date.localeCompare(y.date)))}
+            onDelete={id => setAnnotations(prev => prev.filter(a => a.id !== id))}
+          />
         </div>
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Revenue by channel</h3>
@@ -237,7 +203,7 @@ function SegmentBDashboard({ days }: { days: number }) {
         </div>
       </div>
 
-      {/* Charts row 3 */}
+      {/* AOV */}
       <div className="card">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">Average order value trend</h3>
         <AovTrendChart data={data.aov_trend} />
@@ -251,6 +217,7 @@ function SegmentBDashboard({ days }: { days: number }) {
 function SegmentADashboard({ days }: { days: number }) {
   const [eventType, setEventType] = useState('');
   const [retentionWeeks, setRetentionWeeks] = useState(12);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
 
   const { data, error, isLoading } = useSWR(
     ['segment-a', days, eventType],
@@ -263,6 +230,11 @@ function SegmentADashboard({ days }: { days: number }) {
     () => getRetention(retentionWeeks),
     { refreshInterval: 300_000 },
   );
+
+  useSWR('annotations-A', () => listAnnotations('A'), {
+    onSuccess: (data) => setAnnotations(data),
+    revalidateOnFocus: false,
+  });
 
   if (isLoading) return <DashboardSkeleton cols={2} />;
   if (error)     return <ErrorBanner message={error.message} />;
@@ -278,49 +250,31 @@ function SegmentADashboard({ days }: { days: number }) {
           {data.available_event_types.length > 0 && (
             <>
               <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Filter:</span>
-              <FilterSelect
-                label="All event types"
-                value={eventType}
-                options={data.available_event_types}
-                onChange={setEventType}
-              />
-              {eventType && (
-                <button
-                  onClick={() => setEventType('')}
-                  className="text-xs text-brand-600 hover:underline"
-                >
-                  Clear
-                </button>
-              )}
+              <FilterSelect label="All event types" value={eventType} options={data.available_event_types} onChange={setEventType} />
+              {eventType && <button onClick={() => setEventType('')} className="text-xs text-brand-600 hover:underline">Clear</button>}
             </>
           )}
         </div>
-        <ExportButton
-          segment="segment-a"
-          days={days}
-          filter={eventType ? { event_type: eventType } : undefined}
-        />
+        <ExportButton segment="segment-a" days={days} filter={eventType ? { event_type: eventType } : undefined} />
       </div>
 
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-4">
-        <StatCard
-          label="Total Events"
-          value={data.total_events.toLocaleString()}
-          sub={`${days}d`}
-          change={evtChange}
-        />
-        <StatCard
-          label="DAU"
-          value={data.dau !== null ? data.dau.toLocaleString() : '—'}
-        />
+        <StatCard label="Total Events" value={data.total_events.toLocaleString()} sub={`${days}d`} change={evtChange} />
+        <StatCard label="DAU" value={data.dau !== null ? data.dau.toLocaleString() : '—'} />
       </div>
 
-      {/* Charts row 1 */}
+      {/* Events timeline + annotations */}
       <div className="grid grid-cols-2 gap-6">
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Events over time</h3>
-          <EventsChart data={data.events_timeline} />
+          <EventsChart data={data.events_timeline} annotations={annotations} />
+          <AnnotationsPanel
+            segment="A"
+            annotations={annotations}
+            onAdd={a => setAnnotations(prev => [...prev, a].sort((x, y) => x.date.localeCompare(y.date)))}
+            onDelete={id => setAnnotations(prev => prev.filter(a => a.id !== id))}
+          />
         </div>
         <div className="card">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Top events</h3>
@@ -349,16 +303,15 @@ function SegmentADashboard({ days }: { days: number }) {
             onChange={e => setRetentionWeeks(Number(e.target.value))}
             className="input w-auto text-xs py-1"
           >
-            {[4, 8, 12, 26, 52].map(w => (
-              <option key={w} value={w}>{w} weeks</option>
-            ))}
+            {[4, 8, 12, 26, 52].map(w => <option key={w} value={w}>{w} weeks</option>)}
           </select>
         </div>
-        {retLoading ? (
-          <div className="h-32 bg-gray-100 rounded animate-pulse" />
-        ) : retData ? (
-          <RetentionCohortChart cohorts={retData.cohorts} weeks={retData.weeks} />
-        ) : null}
+        {retLoading
+          ? <div className="h-32 bg-gray-100 rounded animate-pulse" />
+          : retData
+            ? <RetentionCohortChart cohorts={retData.cohorts} weeks={retData.weeks} />
+            : null
+        }
       </div>
     </div>
   );
@@ -399,18 +352,18 @@ export default function DashboardPage() {
   const [days, setDays] = useState(30);
   const [customDays, setCustomDays] = useState('');
   const [showCustom, setShowCustom] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   function applyCustomDays() {
     const n = parseInt(customDays, 10);
-    if (n >= 1 && n <= 365) {
-      setDays(n);
-      setShowCustom(false);
-      setCustomDays('');
-    }
+    if (n >= 1 && n <= 365) { setDays(n); setShowCustom(false); setCustomDays(''); }
   }
 
   return (
     <AppShell>
+      {/* Share modal */}
+      {showShare && <ShareModal segment={segment} onClose={() => setShowShare(false)} />}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -421,6 +374,21 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Share button */}
+          <button
+            onClick={() => setShowShare(true)}
+            className="flex items-center gap-1.5 text-xs font-medium text-gray-600
+                       border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50
+                       transition-colors"
+            title="Share dashboard"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+            </svg>
+            Share
+          </button>
+
           {/* Segment toggle */}
           <div className="flex rounded-lg border border-gray-200 overflow-hidden">
             {(['B', 'A'] as Segment[]).map(s => (
@@ -428,9 +396,7 @@ export default function DashboardPage() {
                 key={s}
                 onClick={() => setSegment(s)}
                 className={`px-4 py-1.5 text-sm font-medium transition-colors ${
-                  segment === s
-                    ? 'bg-brand-600 text-white'
-                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                  segment === s ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
                 }`}
               >
                 Segment {s}
@@ -443,59 +409,33 @@ export default function DashboardPage() {
             <select
               value={DAYS_OPTIONS.includes(days) ? days : 'custom'}
               onChange={e => {
-                if (e.target.value === 'custom') {
-                  setShowCustom(true);
-                } else {
-                  setDays(Number(e.target.value));
-                  setShowCustom(false);
-                }
+                if (e.target.value === 'custom') { setShowCustom(true); }
+                else { setDays(Number(e.target.value)); setShowCustom(false); }
               }}
               className="input w-auto text-sm py-1.5"
             >
-              {DAYS_OPTIONS.map(d => (
-                <option key={d} value={d}>Last {d} days</option>
-              ))}
-              {!DAYS_OPTIONS.includes(days) && (
-                <option value="custom">Last {days} days</option>
-              )}
+              {DAYS_OPTIONS.map(d => <option key={d} value={d}>Last {d} days</option>)}
+              {!DAYS_OPTIONS.includes(days) && <option value="custom">Last {days} days</option>}
               <option value="custom">Custom…</option>
             </select>
 
             {showCustom && (
               <div className="flex items-center gap-1">
                 <input
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={customDays}
-                  onChange={e => setCustomDays(e.target.value)}
+                  type="number" min={1} max={365}
+                  value={customDays} onChange={e => setCustomDays(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && applyCustomDays()}
-                  placeholder="days"
-                  className="input w-20 text-sm py-1.5"
-                  autoFocus
+                  placeholder="days" className="input w-20 text-sm py-1.5" autoFocus
                 />
-                <button
-                  onClick={applyCustomDays}
-                  className="btn-primary text-xs px-2 py-1.5"
-                >
-                  Go
-                </button>
-                <button
-                  onClick={() => setShowCustom(false)}
-                  className="text-xs text-gray-400 hover:text-gray-600"
-                >
-                  ✕
-                </button>
+                <button onClick={applyCustomDays} className="btn-primary text-xs px-2 py-1.5">Go</button>
+                <button onClick={() => setShowCustom(false)} className="text-xs text-gray-400 hover:text-gray-600">✕</button>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {segment === 'B'
-        ? <SegmentBDashboard days={days} />
-        : <SegmentADashboard days={days} />
-      }
+      {segment === 'B' ? <SegmentBDashboard days={days} /> : <SegmentADashboard days={days} />}
     </AppShell>
   );
 }

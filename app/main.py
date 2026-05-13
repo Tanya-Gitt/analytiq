@@ -25,11 +25,13 @@ from fastapi.staticfiles import StaticFiles
 
 from app.database import close_pool, create_pool
 from app.routers import alerts as alerts_router
+from app.routers import annotations as annotations_router
 from app.routers import auth as auth_router
 from app.routers import connectors as connectors_router
 from app.routers import dashboard as dashboard_router
 from app.routers import export as export_router
 from app.routers import ingest as ingest_router
+from app.routers import share as share_router
 from app.routers import stream as stream_router
 from app.routers import webhook as webhook_router
 
@@ -74,6 +76,8 @@ app.include_router(dashboard_router.router,  prefix="/api",      tags=["dashboar
 app.include_router(export_router.router,     prefix="/api",      tags=["export"])
 app.include_router(stream_router.router,     prefix="/api",      tags=["stream"])
 app.include_router(alerts_router.router,     prefix="/api",      tags=["alerts"])
+app.include_router(share_router.router,      prefix="/api",      tags=["share"])
+app.include_router(annotations_router.router, prefix="/api",     tags=["annotations"])
 
 # ── Static: JS SDK ────────────────────────────────────────────────────────────
 # Serves sdk/analytics.js at /sdk/analytics.js

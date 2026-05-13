@@ -293,6 +293,81 @@ export function getRetention(weeks = 12) {
   return request<RetentionData>(`/dashboard/retention?weeks=${weeks}`);
 }
 
+// ── Share tokens ──────────────────────────────────────────────────────────────
+
+export interface ShareToken {
+  id: string;
+  token: string;
+  segment: 'A' | 'B';
+  days: number;
+  label: string;
+  expires_at: string | null;
+  created_at: string;
+  public_url: string;
+}
+
+export function listShareTokens() {
+  return request<ShareToken[]>('/share');
+}
+
+export function createShareToken(payload: {
+  segment: 'A' | 'B';
+  days?: number;
+  label?: string;
+  expires_at?: string | null;
+}) {
+  return request<ShareToken>('/share', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function revokeShareToken(token: string) {
+  return request<void>(`/share/${token}`, { method: 'DELETE' });
+}
+
+/** Public — no auth header needed */
+export function getShareData(token: string) {
+  return fetch(`${BASE}/share/${token}/data`).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, body?.detail ?? `HTTP ${res.status}`);
+    }
+    return res.json();
+  });
+}
+
+// ── Annotations ───────────────────────────────────────────────────────────────
+
+export interface Annotation {
+  id: string;
+  segment: 'A' | 'B';
+  date: string;
+  label: string;
+  color: string;
+  created_at: string;
+}
+
+export function listAnnotations(segment: 'A' | 'B') {
+  return request<Annotation[]>(`/annotations?segment=${segment}`);
+}
+
+export function createAnnotation(payload: {
+  segment: 'A' | 'B';
+  date: string;
+  label: string;
+  color?: string;
+}) {
+  return request<Annotation>('/annotations', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAnnotation(id: string) {
+  return request<void>(`/annotations/${id}`, { method: 'DELETE' });
+}
+
 // ── Export ────────────────────────────────────────────────────────────────────
 
 /**

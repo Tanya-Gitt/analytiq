@@ -2,12 +2,13 @@
 
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer,
+  Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import type { RevenueTrendPoint } from '@/lib/api';
+import type { RevenueTrendPoint, Annotation } from '@/lib/api';
 
 interface Props {
   data: RevenueTrendPoint[];
+  annotations?: Annotation[];
 }
 
 function fmt(v: number) {
@@ -16,7 +17,7 @@ function fmt(v: number) {
   return `$${v.toFixed(0)}`;
 }
 
-export default function RevenueChart({ data }: Props) {
+export default function RevenueChart({ data, annotations = [] }: Props) {
   if (!data.length) {
     return (
       <div className="h-48 flex items-center justify-center text-sm text-gray-400">
@@ -40,7 +41,7 @@ export default function RevenueChart({ data }: Props) {
           tick={{ fontSize: 11, fill: '#9ca3af' }}
           tickLine={false}
           axisLine={false}
-          tickFormatter={d => d.slice(5)} // "2024-03-15" → "03-15"
+          tickFormatter={d => d.slice(5)}
         />
         <YAxis
           tick={{ fontSize: 11, fill: '#9ca3af' }}
@@ -53,6 +54,21 @@ export default function RevenueChart({ data }: Props) {
           formatter={(v: number) => [fmt(v), 'Revenue']}
           contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
         />
+        {annotations.map(ann => (
+          <ReferenceLine
+            key={ann.id}
+            x={ann.date}
+            stroke={ann.color}
+            strokeWidth={2}
+            strokeDasharray="4 2"
+            label={{
+              value: ann.label,
+              position: 'insideTopRight',
+              fontSize: 10,
+              fill: ann.color,
+            }}
+          />
+        ))}
         <Area
           type="monotone"
           dataKey="revenue"

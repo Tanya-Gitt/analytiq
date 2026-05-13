@@ -62,24 +62,45 @@ async def _event_generator(
     Async generator that yields SSE-formatted strings.
     Each yielded string is one complete SSE message.
     """
-    # If no cursor provided, start from the latest event id so the client
-    # only receives *new* events rather than a historical dump.
+    # On initial connect (no cursor): fetch the last 50 events so the user
+    # sees recent history immediately after page load / refresh, then stream
+    # new events from there. This prevents the "blank on refresh" problem.
+    initial_events: list = []
     if cursor is None:
         async with pool.acquire() as conn:
             async with conn.transaction():
                 await conn.execute("SET LOCAL ROLE app_role")
                 await conn.execute(f"SET LOCAL app.org_id = '{org_id}'")
-                cursor = await conn.fetchval(
+                rows = await conn.fetch(
                     """
-                    SELECT COALESCE(MAX(id), 0) FROM events
-                    WHERE org_id = $1
+                    SELECT id, event_name, user_id,
+                           received_at::text AS received_at,
+                           properties
+                    FROM   events
+                    WHERE  org_id = $1
+                    ORDER  BY id DESC
+                    LIMIT  50
                     """,
                     org_id,
-                ) or 0
+                )
+        # Reverse so oldest → newest in the feed
+        initial_events = list(reversed(rows))
+        cursor = initial_events[-1]["id"] if initial_events else 0
 
     # Send an initial "connected" comment so the browser knows the stream
     # is live (SSE comment lines start with ":").
     yield f": connected org={org_id} cursor={cursor}\n\n"
+
+    # Replay the last 50 historical events before entering the live loop
+    for row in initial_events:
+        payload = {
+            "id":          row["id"],
+            "event_name":  row["event_name"],
+            "user_id":     row["user_id"],
+            "received_at": row["received_at"],
+            "properties":  row["properties"] or {},
+        }
+        yield f"id: {row['id']}\ndata: {json.dumps(payload)}\n\n"
 
     while True:
         # Check if the client has disconnected (avoids burning DB on dead connections)
