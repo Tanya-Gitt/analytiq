@@ -31,6 +31,8 @@ from app.routers import auth as auth_router
 from app.routers import connectors as connectors_router
 from app.routers import copilot as copilot_router
 from app.routers import dashboard as dashboard_router
+from app.routers import flags as flags_router
+from app.routers import heatmaps as heatmaps_router
 from app.routers import export as export_router
 from app.routers import funnels as funnels_router
 from app.routers import ingest as ingest_router
@@ -89,6 +91,8 @@ app.include_router(funnels_router.router,     prefix="/api",      tags=["funnels
 app.include_router(sso_router.router,         prefix="/api/auth", tags=["sso"])
 app.include_router(anomalies_router.router,   prefix="/api",      tags=["anomalies"])
 app.include_router(copilot_router.router,     prefix="/api",      tags=["copilot"])
+app.include_router(flags_router.router,       prefix="/api",      tags=["flags"])
+app.include_router(heatmaps_router.router,    prefix="/api",      tags=["heatmaps"])
 app.include_router(setup_router.router,       prefix="/api",      tags=["setup"])
 
 # ── Static: JS SDK ────────────────────────────────────────────────────────────

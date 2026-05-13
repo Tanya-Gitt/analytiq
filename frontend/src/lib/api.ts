@@ -637,3 +637,70 @@ export function copilotQuery(question: string) {
 export function copilotSuggestions() {
   return request<{ suggestions: string[] }>('/copilot/suggestions');
 }
+
+// ── Feature Flags ─────────────────────────────────────────────────────────────
+
+export interface FeatureFlag {
+  id:          string;
+  name:        string;
+  description: string;
+  enabled:     boolean;
+  rollout_pct: number;
+  targeting:   { attribute: string; operator: string; value: unknown }[];
+  created_at:  string;
+  updated_at:  string;
+}
+
+export function listFlags() {
+  return request<FeatureFlag[]>('/flags');
+}
+
+export function createFlag(payload: {
+  name:        string;
+  description?: string;
+  enabled?:    boolean;
+  rollout_pct?: number;
+}) {
+  return request<FeatureFlag>('/flags', {
+    method: 'POST',
+    body:   JSON.stringify(payload),
+  });
+}
+
+export function updateFlag(id: string, patch: Partial<Pick<FeatureFlag, 'description' | 'enabled' | 'rollout_pct' | 'targeting'>>) {
+  return request<FeatureFlag>(`/flags/${id}`, {
+    method: 'PATCH',
+    body:   JSON.stringify(patch),
+  });
+}
+
+export function deleteFlag(id: string) {
+  return request<void>(`/flags/${id}`, { method: 'DELETE' });
+}
+
+// ── Heatmaps ──────────────────────────────────────────────────────────────────
+
+export interface HeatmapPage {
+  page_url:  string;
+  clicks:    number;
+  scrolls:   number;
+  last_seen: string | null;
+}
+
+export function listHeatmapPages() {
+  return request<HeatmapPage[]>('/heatmap/pages');
+}
+
+export function getHeatmapClicks(pageUrl: string, days = 30) {
+  const params = new URLSearchParams({ page_url: pageUrl, days: String(days) });
+  return request<{ cells: { row: number; col: number; intensity: number; count: number }[]; total_clicks: number }>(
+    `/heatmap/clicks?${params}`,
+  );
+}
+
+export function getHeatmapScroll(pageUrl: string, days = 30) {
+  const params = new URLSearchParams({ page_url: pageUrl, days: String(days) });
+  return request<{ buckets: { depth: number; sessions: number; pct: number }[]; total_sessions: number }>(
+    `/heatmap/scroll?${params}`,
+  );
+}

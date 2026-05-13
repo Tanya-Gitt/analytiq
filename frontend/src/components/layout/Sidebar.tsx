@@ -88,6 +88,26 @@ const NAV = [
     ),
   },
   {
+    href: '/flags',
+    label: 'Feature Flags',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M3 3v18M3 6l9-3 9 3v9l-9 3-9-3V6z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/heatmaps',
+    label: 'Heatmaps',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75s.168-.75.375-.75.375.336.375.75zm4.875 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75z" />
+      </svg>
+    ),
+  },
+  {
     href: '/alerts',
     label: 'Alerts',
     icon: (
