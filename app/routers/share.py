@@ -23,11 +23,11 @@ from typing import Any
 
 import asyncpg
 import cachetools
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.database import get_pool
-from app.deps import get_org_db, get_org_id_from_jwt
+from app.deps import get_org_db
 from app.routers.dashboard import _fetch_segment_a_data, _fetch_segment_b_data
 
 router = APIRouter()

@@ -44,23 +44,23 @@ Event tracking + e-commerce analytics in a single Docker Compose stack — no Sa
 - Per-channel filtering, delivery rate KPI
 - Orders via webhook, CSV upload, or Google Sheets polling
 
-**Custom Funnels** *(Phase 4)*
+**Custom Funnels**
 - Build any multi-step user journey (up to 10 steps) with a drag-and-drop editor
 - Event name autocomplete from your live data
 - Ordered funnel algorithm: step N counts only users who completed all prior steps
 - 7 / 14 / 30 / 90-day windows, live chart with drop-off visualisation
 
-**Team collaboration** *(Phase 4)*
+**Team collaboration**
 - Invite teammates by email — shareable token link with 7-day expiry
 - Roles: `admin` (full control) and `viewer` (read-only dashboards)
 - Admin: invite, remove members, change roles; viewers cannot access settings
 - JWT role claims — role enforced at API layer on every request
 
-**Sharing & annotations** *(Phase 3)*
+**Sharing & annotations**
 - Public share links — share a read-only dashboard snapshot (Segment A or B) with anyone, no login required; optional expiry date
 - Chart annotations — pin notes to specific dates on any time-series chart; colour-coded reference lines
 
-**Live feed** *(Phase 2)*
+**Live feed**
 - Real-time SSE stream of incoming events — see every `track`, `page`, and `identify` call as it lands
 - Weekly email digest with key metrics
 
@@ -257,8 +257,8 @@ analytiq/
 │   │   ├── live.py           # SSE real-time event stream
 │   │   ├── share.py          # Public share token CRUD + data endpoint
 │   │   ├── annotations.py    # Chart annotation CRUD
-│   │   ├── team.py           # Team invites, member management  ← Phase 4
-│   │   └── funnels.py        # Custom funnel builder + query    ← Phase 4
+│   │   ├── team.py           # Team invites, member management
+│   │   └── funnels.py        # Custom funnel builder + query
 │   ├── connectors/           # CSV coercion + sync logic
 │   ├── notifications.py      # SMTP email helper (used by team invites)
 │   ├── deps.py               # RLS dependency injection — read before modifying!
@@ -274,11 +274,11 @@ analytiq/
 │       │   ├── dashboard/    # Segment A + B dashboards (tabs)
 │       │   ├── connectors/   # Connector management UI
 │       │   ├── live/         # Real-time SSE live feed
-│       │   ├── funnels/      # Drag-and-drop funnel builder ← Phase 4
+│       │   ├── funnels/      # Drag-and-drop funnel builder
 │       │   ├── alerts/       # Alert rule management
-│       │   ├── settings/     # API key, team panel           ← Phase 4
-│       │   ├── invite/[token]/ # Accept-invite public page   ← Phase 4
-│       │   └── share/[token]/  # Public shared dashboard     ← Phase 3
+│       │   ├── settings/     # API key, team panel
+│       │   ├── invite/[token]/ # Accept-invite public page
+│       │   └── share/[token]/  # Public shared dashboard
 │       ├── components/
 │       │   ├── charts/       # Recharts wrappers (Revenue, Events, Funnel, Retention…)
 │       │   └── layout/       # AppShell, Sidebar, nav
@@ -288,7 +288,7 @@ analytiq/
 ├── sdk/
 │   └── analytics.js          # Browser JS SDK (identify, track, page)
 ├── db/
-│   ├── schema.sql             # Core schema + RLS policies (Phase 1–3)
+│   ├── schema.sql             # Core PostgreSQL schema + RLS policies
 │   └── migrations/
 │       └── 002_phase4.sql    # role column, org_invites, funnels tables
 ├── nginx/

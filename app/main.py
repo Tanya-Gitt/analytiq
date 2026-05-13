@@ -26,15 +26,15 @@ from fastapi.staticfiles import StaticFiles
 from app.database import close_pool, create_pool
 from app.routers import alerts as alerts_router
 from app.routers import annotations as annotations_router
-from app.routers import funnels as funnels_router
-from app.routers import team as team_router
 from app.routers import auth as auth_router
 from app.routers import connectors as connectors_router
 from app.routers import dashboard as dashboard_router
 from app.routers import export as export_router
+from app.routers import funnels as funnels_router
 from app.routers import ingest as ingest_router
 from app.routers import share as share_router
 from app.routers import stream as stream_router
+from app.routers import team as team_router
 from app.routers import webhook as webhook_router
 
 
