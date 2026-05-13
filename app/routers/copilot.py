@@ -17,7 +17,7 @@ Security model
    client (no raw pg errors that could leak schema info).
 4. Row cap: max 500 rows returned regardless of what Claude generates.
 
-Requires: ANTHROPIC_API_KEY environment variable.
+Requires: GROQ_API_KEY environment variable.
 """
 
 from __future__ import annotations
@@ -28,9 +28,9 @@ import os
 import re
 from typing import Any
 
-import anthropic
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
+from groq import AsyncGroq
 from pydantic import BaseModel
 
 from app.deps import get_org_db
@@ -148,36 +148,44 @@ def _validate_sql(sql: str) -> str:
     return sql
 
 
-# ── Claude call ───────────────────────────────────────────────────────────────
+# ── Groq call ────────────────────────────────────────────────────────────────
 
-def _get_client() -> anthropic.AsyncAnthropic:
-    key = os.environ.get("ANTHROPIC_API_KEY", "")
+_GROQ_MODEL = "llama-3.3-70b-versatile"
+
+
+def _get_client() -> AsyncGroq:
+    key = os.environ.get("GROQ_API_KEY", "")
     if not key:
         raise HTTPException(
             status_code=503,
-            detail="AI Copilot is not configured. Set ANTHROPIC_API_KEY in your environment.",
+            detail="AI Copilot is not configured. Set GROQ_API_KEY in your environment.",
         )
-    return anthropic.AsyncAnthropic(api_key=key)
+    return AsyncGroq(api_key=key)
 
 
-async def _ask_claude(question: str) -> dict[str, Any]:
+async def _ask_groq(question: str) -> dict[str, Any]:
     client = _get_client()
-    message = await client.messages.create(
-        model="claude-3-5-haiku-20241022",
+    completion = await client.chat.completions.create(
+        model=_GROQ_MODEL,
         max_tokens=1024,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": question}],
+        temperature=0,
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user",   "content": question},
+        ],
+        response_format={"type": "json_object"},
     )
-    raw = message.content[0].text.strip()
+    raw = completion.choices[0].message.content or ""
+    raw = raw.strip()
 
-    # Strip markdown code fences if Claude wraps in them
+    # Strip markdown code fences if the model wraps in them
     raw = re.sub(r'^```(?:json)?\s*', '', raw)
     raw = re.sub(r'\s*```$', '', raw)
 
     try:
         return json.loads(raw)
     except json.JSONDecodeError as exc:
-        logger.warning("Claude returned non-JSON: %s", raw[:200])
+        logger.warning("Groq returned non-JSON: %s", raw[:200])
         raise HTTPException(status_code=502, detail=f"AI returned malformed response: {exc}") from exc
 
 
@@ -251,8 +259,8 @@ async def copilot_query(
     if len(question) > 1000:
         raise HTTPException(400, "question too long (max 1000 chars)")
 
-    # 1. Ask Claude for SQL + chart spec
-    ai_resp = await _ask_claude(question)
+    # 1. Ask Groq for SQL + chart spec
+    ai_resp = await _ask_groq(question)
 
     raw_sql = ai_resp.get("sql", "")
     if not raw_sql:
