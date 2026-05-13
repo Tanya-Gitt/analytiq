@@ -5,8 +5,8 @@ import useSWR from 'swr';
 import AppShell from '@/components/layout/AppShell';
 import {
   getMe, rotateApiKey, getTeam, inviteMember, removeMember,
-  updateMemberRole, cancelInvite,
-  ApiError, type TeamMember, type PendingInvite,
+  updateMemberRole, cancelInvite, listSSOConfigs, createSSOConfig, deleteSSOConfig,
+  ApiError, type TeamMember, type PendingInvite, type SSOConfig,
 } from '@/lib/api';
 
 // ── Copy helper ───────────────────────────────────────────────────────────────
@@ -183,6 +183,144 @@ function TeamPanel({ currentUserId }: { currentUserId: string }) {
   );
 }
 
+// ── SSO panel ─────────────────────────────────────────────────────────────────
+
+function SSOPanel() {
+  const { data: configs, mutate } = useSWR('sso-configs', listSSOConfigs);
+  const [provider,      setProvider]      = useState<'google' | 'github' | 'oidc'>('oidc');
+  const [clientId,      setClientId]      = useState('');
+  const [clientSecret,  setClientSecret]  = useState('');
+  const [discoveryUrl,  setDiscoveryUrl]  = useState('');
+  const [saving,        setSaving]        = useState(false);
+  const [saveErr,       setSaveErr]       = useState('');
+  const [saveOk,        setSaveOk]        = useState('');
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true); setSaveErr(''); setSaveOk('');
+    try {
+      await createSSOConfig({ provider, client_id: clientId, client_secret: clientSecret, discovery_url: discoveryUrl || undefined });
+      setSaveOk('SSO configuration saved.');
+      setClientId(''); setClientSecret(''); setDiscoveryUrl('');
+      await mutate();
+    } catch (err) {
+      setSaveErr(err instanceof ApiError ? err.message : 'Save failed');
+    } finally { setSaving(false); }
+  }
+
+  async function handleDelete(p: string) {
+    if (!confirm(`Remove ${p} SSO config?`)) return;
+    try { await deleteSSOConfig(p); await mutate(); }
+    catch (err) { alert(err instanceof ApiError ? err.message : 'Delete failed'); }
+  }
+
+  const PROVIDER_HINTS: Record<string, { discovery: string; docs: string }> = {
+    google: { discovery: 'https://accounts.google.com', docs: 'https://console.cloud.google.com/' },
+    github: { discovery: '', docs: 'https://github.com/settings/applications/new' },
+    oidc:   { discovery: 'https://your-okta-domain.okta.com', docs: 'https://developer.okta.com/' },
+  };
+
+  return (
+    <div className="card space-y-5">
+      <div>
+        <h2 className="text-sm font-semibold text-gray-900">Single Sign-On (SSO)</h2>
+        <p className="text-xs text-gray-500 mt-1">
+          Allow your team to sign in with Google, GitHub, Okta, Azure AD, or any OIDC-compatible provider.
+          Members who sign in via SSO are provisioned automatically.
+        </p>
+      </div>
+
+      {/* Existing configs */}
+      {configs && configs.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Active providers</p>
+          {configs.map((c: SSOConfig) => (
+            <div key={c.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
+              <span className={`w-2 h-2 rounded-full ${c.enabled ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-800">{c.provider}</p>
+                {c.discovery_url && (
+                  <p className="text-xs text-gray-400 truncate">{c.discovery_url}</p>
+                )}
+              </div>
+              <span className="text-xs text-gray-400">Client: {c.client_id.slice(0, 12)}…</span>
+              <button
+                onClick={() => handleDelete(c.provider)}
+                className="text-xs text-red-400 hover:text-red-600"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add / update config */}
+      <form onSubmit={handleSave} className="space-y-3 pt-3 border-t border-gray-100">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Add / update provider</p>
+
+        <div className="flex gap-2">
+          {(['google', 'github', 'oidc'] as const).map(p => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setProvider(p)}
+              className={`flex-1 rounded-xl py-2 text-xs font-medium border transition-colors ${
+                provider === p
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
+              }`}
+            >
+              {p === 'oidc' ? 'Custom OIDC' : p.charAt(0).toUpperCase() + p.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        <p className="text-xs text-gray-400">
+          {provider === 'google' && <>Create OAuth credentials at <a href={PROVIDER_HINTS.google.docs} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">Google Cloud Console</a>. Discovery URL is set automatically.</>}
+          {provider === 'github' && <>Register an OAuth app at <a href={PROVIDER_HINTS.github.docs} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">GitHub Developer Settings</a>. Callback URL: <code className="bg-gray-100 rounded px-1">/api/auth/sso/callback</code></>}
+          {provider === 'oidc' && <>Supports Okta, Azure AD, Keycloak, Auth0, Ping and any OIDC-compliant provider. Paste the base URL (without /.well-known/openid-configuration).</>}
+        </p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Client ID</label>
+            <input className="input text-sm" placeholder="client_id" value={clientId}
+              onChange={e => setClientId(e.target.value)} required />
+          </div>
+          <div>
+            <label className="label">Client Secret</label>
+            <input className="input text-sm" type="password" placeholder="client_secret" value={clientSecret}
+              onChange={e => setClientSecret(e.target.value)} required />
+          </div>
+        </div>
+
+        {provider !== 'github' && (
+          <div>
+            <label className="label">
+              Discovery URL
+              {provider === 'google' && <span className="text-gray-400 normal-case font-normal ml-1">(auto-filled for Google)</span>}
+            </label>
+            <input className="input text-sm" placeholder={PROVIDER_HINTS[provider]?.discovery || 'https://…'}
+              value={provider === 'google' ? 'https://accounts.google.com' : discoveryUrl}
+              readOnly={provider === 'google'}
+              onChange={e => setDiscoveryUrl(e.target.value)}
+            />
+          </div>
+        )}
+
+        <button type="submit" disabled={saving}
+          className="btn-primary text-sm w-full disabled:opacity-60">
+          {saving ? 'Saving…' : 'Save SSO configuration'}
+        </button>
+
+        {saveOk  && <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">✓ {saveOk}</p>}
+        {saveErr && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{saveErr}</p>}
+      </form>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -257,6 +395,9 @@ export default function SettingsPage() {
 
             {/* Team members */}
             <TeamPanel currentUserId={data.user_id} />
+
+            {/* SSO */}
+            <SSOPanel />
 
             {/* API key */}
             <div className="card space-y-4">

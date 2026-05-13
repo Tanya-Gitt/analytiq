@@ -33,6 +33,7 @@ from app.routers import export as export_router
 from app.routers import funnels as funnels_router
 from app.routers import ingest as ingest_router
 from app.routers import share as share_router
+from app.routers import sso as sso_router
 from app.routers import stream as stream_router
 from app.routers import team as team_router
 from app.routers import webhook as webhook_router
@@ -82,6 +83,7 @@ app.include_router(share_router.router,      prefix="/api",      tags=["share"])
 app.include_router(annotations_router.router, prefix="/api",     tags=["annotations"])
 app.include_router(team_router.router,        prefix="/api",      tags=["team"])
 app.include_router(funnels_router.router,     prefix="/api",      tags=["funnels"])
+app.include_router(sso_router.router,         prefix="/api/auth", tags=["sso"])
 
 # ── Static: JS SDK ────────────────────────────────────────────────────────────
 # Serves sdk/analytics.js at /sdk/analytics.js

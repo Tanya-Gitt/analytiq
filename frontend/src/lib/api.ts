@@ -487,6 +487,37 @@ export function acceptInvite(token: string, password: string) {
   });
 }
 
+// ── SSO config ────────────────────────────────────────────────────────────────
+
+export interface SSOConfig {
+  id:            string;
+  provider:      string;
+  client_id:     string;
+  discovery_url: string | null;
+  enabled:       boolean;
+  created_at:    string;
+}
+
+export function listSSOConfigs() {
+  return request<SSOConfig[]>('/auth/sso/config');
+}
+
+export function createSSOConfig(payload: {
+  provider: string;
+  client_id: string;
+  client_secret: string;
+  discovery_url?: string;
+}) {
+  return request<SSOConfig>('/auth/sso/config', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteSSOConfig(provider: string) {
+  return request<void>(`/auth/sso/config/${provider}`, { method: 'DELETE' });
+}
+
 // ── Custom funnels ────────────────────────────────────────────────────────────
 
 export interface Funnel {
