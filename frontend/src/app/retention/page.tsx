@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { getRetention, type RetentionData } from '@/lib/api';
+import AppShell from '@/components/layout/AppShell';
 import RetentionCohortChart from '@/components/charts/RetentionCohortChart';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -122,7 +123,8 @@ export default function RetentionPage() {
   const w4avg = data?.avg_by_week.find(w => w.week_number === 4);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <AppShell>
+    <div className="max-w-7xl mx-auto space-y-6">
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -274,5 +276,6 @@ export default function RetentionPage() {
         </>
       )}
     </div>
+    </AppShell>
   );
 }
