@@ -27,3 +27,6 @@ python-dotenv>=1.0.0
 
 # Caching (dashboard TTL cache)
 cachetools>=5.3.0
+
+# AI Copilot (natural-language → SQL)
+anthropic>=0.25.0

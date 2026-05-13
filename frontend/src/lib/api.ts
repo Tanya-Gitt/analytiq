@@ -600,3 +600,28 @@ export function getFunnelData(id: string, days = 30) {
 export function listFunnelEvents() {
   return request<string[]>('/funnels/events');
 }
+
+// ── AI Copilot ────────────────────────────────────────────────────────────────
+
+export interface CopilotQueryResponse {
+  question:   string;
+  sql:        string;
+  columns:    string[];
+  rows:       (string | number | boolean | null)[][];
+  chart_type: 'bar' | 'line' | 'pie' | 'number' | 'table';
+  x_key:      string;
+  y_key:      string;
+  title:      string;
+  insight:    string;
+}
+
+export function copilotQuery(question: string) {
+  return request<CopilotQueryResponse>('/copilot/query', {
+    method: 'POST',
+    body: JSON.stringify({ question }),
+  });
+}
+
+export function copilotSuggestions() {
+  return request<{ suggestions: string[] }>('/copilot/suggestions');
+}
