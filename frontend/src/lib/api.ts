@@ -601,6 +601,18 @@ export function listFunnelEvents() {
   return request<string[]>('/funnels/events');
 }
 
+// ── Setup / SDK health ────────────────────────────────────────────────────────
+
+export interface SetupStatus {
+  last_event_at:   string | null;
+  last_event_name: string | null;
+  total_events:    number;
+}
+
+export function getSetupStatus() {
+  return request<SetupStatus>('/setup/status');
+}
+
 // ── AI Copilot ────────────────────────────────────────────────────────────────
 
 export interface CopilotQueryResponse {
