@@ -271,9 +271,11 @@ export default function SetupPage() {
     refreshInterval: 10_000,
   });
 
-  const apiKey    = me?.api_key ?? '';
-  const maskedKey = apiKey ? '•'.repeat(24) + apiKey.slice(-8) : '…loading…';
-  const code      = snippets(apiKey || 'YOUR_API_KEY', host || 'https://your-host.com');
+  const apiKey      = me?.api_key ?? '';
+  const maskedKey   = apiKey ? '•'.repeat(24) + apiKey.slice(-8) : '…loading…';
+  // Code snippets show the real key only when the user explicitly reveals it
+  const snippetKey  = showKey ? (apiKey || 'YOUR_API_KEY') : 'YOUR_API_KEY';
+  const code        = snippets(snippetKey, host || 'https://your-host.com');
 
   return (
     <AppShell>

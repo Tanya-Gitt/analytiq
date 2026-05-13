@@ -237,12 +237,22 @@ export default function FlagsPage() {
   const [deleting, setDeleting] = useState<FeatureFlag | null>(null);
 
   async function handleToggle(flag: FeatureFlag) {
-    await updateFlag(flag.id, { enabled: !flag.enabled });
-    mutate();
+    // Optimistic update: flip locally first so the list never flashes empty
+    mutate(flags?.map(f => f.id === flag.id ? { ...f, enabled: !f.enabled } : f), false);
+    try {
+      await updateFlag(flag.id, { enabled: !flag.enabled });
+    } finally {
+      mutate(); // sync with server
+    }
   }
 
   async function handleSave(data: Partial<FeatureFlag>) {
     if (modal && 'id' in modal && modal.id) {
+      // Optimistic: patch the edited flag in-place
+      mutate(
+        flags?.map(f => f.id === (modal as FeatureFlag).id ? { ...f, ...data } : f),
+        false,
+      );
       await updateFlag(modal.id, data);
     } else {
       await createFlag(data as Parameters<typeof createFlag>[0]);
@@ -253,6 +263,7 @@ export default function FlagsPage() {
   async function handleDelete(flag: FeatureFlag) {
     await deleteFlag(flag.id);
     setDeleting(null);
+    mutate(flags?.filter(f => f.id !== flag.id), false);
     mutate();
   }
 
