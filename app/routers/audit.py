@@ -34,7 +34,7 @@ async def list_audit(
 
     if category and category in ACTION_CATEGORIES:
         actions = ACTION_CATEGORIES[category]
-        placeholders = ", ".join(f"${i+3}" for i in range(len(actions)))
+        placeholders = ", ".join(f"${i+1}" for i in range(len(actions)))
         where = f"WHERE action IN ({placeholders})"
         params = actions + [limit, offset]
         limit_idx  = len(actions) + 1
@@ -53,7 +53,13 @@ async def list_audit(
         *params,
     )
 
-    total = await db.fetchval("SELECT COUNT(*) FROM audit_log")
+    if category and category in ACTION_CATEGORIES:
+        actions = ACTION_CATEGORIES[category]
+        total = await db.fetchval(
+            f"SELECT COUNT(*) FROM audit_log {where}", *actions
+        )
+    else:
+        total = await db.fetchval("SELECT COUNT(*) FROM audit_log")
 
     return {
         "entries": [

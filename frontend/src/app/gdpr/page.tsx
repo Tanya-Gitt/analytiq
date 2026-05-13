@@ -100,10 +100,13 @@ export default function GdprPage() {
       <div className="card space-y-4">
         <h2 className="font-semibold text-gray-800">Right of Access — Data Export</h2>
         <p className="text-sm text-gray-500">Look up all data stored for a user ID.</p>
+        <p className="text-xs text-gray-400">
+          Enter the exact <strong>user_id</strong> passed to <code className="bg-gray-100 px-1 rounded">identify()</code>, e.g. <code className="bg-gray-100 px-1 rounded">user_042</code>
+        </p>
         <div className="flex gap-2">
           <input
             className="input flex-1"
-            placeholder="User ID or email"
+            placeholder="User ID (e.g. user_042)"
             value={lookupId}
             onChange={e => setLookupId(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleExport()}
@@ -113,10 +116,16 @@ export default function GdprPage() {
           </button>
         </div>
 
-        {exportData && (
+        {exportData && exportData.total_events === 0 && !exportData.opted_out && (
+          <div className="mt-3 px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
+            No events found for <strong className="font-mono">{exportData.user_id}</strong>. Check the user_id is correct — it must match what was passed to <code>identify()</code>.
+          </div>
+        )}
+
+        {exportData && exportData.total_events > 0 && (
           <div className="mt-4 space-y-3">
             <div className="flex items-center gap-4 text-sm">
-              <span className="font-medium">{exportData.user_id}</span>
+              <span className="font-medium font-mono">{exportData.user_id}</span>
               <span className={`badge ${exportData.opted_out ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
                 {exportData.opted_out ? 'Opted out' : 'Tracking active'}
               </span>
