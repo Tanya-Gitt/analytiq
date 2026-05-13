@@ -44,13 +44,14 @@ function SortableStep({
     : suggestions;
 
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-2">
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2 group/step">
       {/* Drag handle */}
       <button
         {...attributes}
         {...listeners}
-        className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing p-1"
+        className="text-gray-300 hover:text-gray-400 cursor-grab active:cursor-grabbing p-1 shrink-0"
         type="button"
+        tabIndex={-1}
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
@@ -64,34 +65,59 @@ function SortableStep({
           value={value}
           onChange={e => { onChange(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Event name…"
+          onBlur={() => setTimeout(() => setOpen(false), 160)}
+          placeholder="Type or pick an event…"
           autoComplete="off"
-          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2
-                     focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          className="w-full text-sm border border-gray-200 rounded-lg pl-3 pr-8 py-2
+                     focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400
+                     bg-white transition-colors"
         />
+        {/* chevron hint */}
+        <svg
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400"
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+
         {open && filtered.length > 0 && (
-          <ul className="absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto
-                         bg-white border border-gray-200 rounded-lg shadow-lg text-sm">
-            {filtered.map(s => (
+          <ul
+            className="absolute z-50 left-0 right-0 mt-1.5 py-1
+                       bg-white border border-gray-200 rounded-xl shadow-xl
+                       max-h-52 overflow-y-auto
+                       ring-1 ring-black/5"
+          >
+            {filtered.map((s, i) => (
               <li
                 key={s}
                 onMouseDown={() => { onChange(s); setOpen(false); }}
-                className="px-3 py-2 cursor-pointer hover:bg-indigo-50 hover:text-indigo-700"
+                className={`
+                  flex items-center gap-2 px-3 py-2 text-sm cursor-pointer
+                  transition-colors select-none
+                  ${i === 0 ? 'rounded-t-lg' : ''}
+                  ${i === filtered.length - 1 ? 'rounded-b-lg' : ''}
+                  hover:bg-indigo-50 hover:text-indigo-700
+                `}
               >
-                {s}
+                {/* small dot indicator */}
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-300 shrink-0" />
+                <span className="font-mono">{s}</span>
               </li>
             ))}
           </ul>
         )}
       </div>
 
+      {/* Remove button */}
       <button
         type="button"
         onClick={onRemove}
-        className="text-gray-300 hover:text-red-400 transition-colors p-1"
+        tabIndex={-1}
+        className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg
+                   text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+        title="Remove step"
       >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
@@ -165,40 +191,60 @@ function FunnelBuilder({ funnel, eventSuggestions, onSaved, onCancel }: BuilderP
   }
 
   return (
-    <div className="card space-y-4">
-      <h3 className="text-sm font-semibold text-gray-900">
-        {funnel ? 'Edit funnel' : 'New funnel'}
-      </h3>
+    <div className="card space-y-5">
+      <div className="flex items-center gap-2">
+        <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+          <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18l-7 8v5l-4 3V12L3 4z" />
+          </svg>
+        </div>
+        <h3 className="text-sm font-semibold text-gray-900">
+          {funnel ? 'Edit funnel' : 'New funnel'}
+        </h3>
+      </div>
 
       <input
         type="text"
         value={name}
         onChange={e => setName(e.target.value)}
-        placeholder="Funnel name"
-        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2
-                   focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        placeholder="e.g. Signup to Purchase"
+        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5
+                   focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400
+                   placeholder:text-gray-400 transition-colors"
         maxLength={120}
       />
 
-      <div className="space-y-2">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-          Steps — drag to reorder
-        </p>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+            Steps
+          </p>
+          <p className="text-xs text-gray-400">drag to reorder</p>
+        </div>
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
         >
           <SortableContext items={steps.map(s => s.id)} strategy={verticalListSortingStrategy}>
-            {steps.map(step => (
-              <SortableStep
-                key={step.id}
-                id={step.id}
-                value={step.value}
-                onChange={v => updateStep(step.id, v)}
-                onRemove={() => removeStep(step.id)}
-                suggestions={eventSuggestions}
-              />
+            {steps.map((step, index) => (
+              <div key={step.id} className="flex items-center gap-2">
+                {/* Step number badge */}
+                <span className="shrink-0 w-5 h-5 rounded-full bg-indigo-100 text-indigo-600
+                                 text-[10px] font-bold flex items-center justify-center select-none">
+                  {index + 1}
+                </span>
+                {/* Arrow connector between steps */}
+                <div className="flex-1">
+                  <SortableStep
+                    id={step.id}
+                    value={step.value}
+                    onChange={v => updateStep(step.id, v)}
+                    onRemove={() => removeStep(step.id)}
+                    suggestions={eventSuggestions}
+                  />
+                </div>
+              </div>
             ))}
           </SortableContext>
         </DndContext>
@@ -207,8 +253,8 @@ function FunnelBuilder({ funnel, eventSuggestions, onSaved, onCancel }: BuilderP
           <button
             type="button"
             onClick={addStep}
-            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium
-                       flex items-center gap-1"
+            className="ml-7 mt-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium
+                       flex items-center gap-1.5 transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
