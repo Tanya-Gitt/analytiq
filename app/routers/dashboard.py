@@ -378,7 +378,7 @@ async def _fetch_retention_data(
                    DATE_TRUNC('week', MIN(received_at))::date AS cohort_week
             FROM   events
             WHERE  user_id IS NOT NULL
-              AND  received_at >= NOW() - ($1 || ' weeks')::interval
+              AND  received_at >= NOW() - ($1 * INTERVAL '1 week')
             GROUP  BY user_id
         ),
         activity AS (
@@ -387,18 +387,18 @@ async def _fetch_retention_data(
                    DATE_TRUNC('week', e.received_at)::date AS active_week
             FROM   events e
             WHERE  e.user_id IS NOT NULL
-              AND  e.received_at >= NOW() - ($1 || ' weeks')::interval
+              AND  e.received_at >= NOW() - ($1 * INTERVAL '1 week')
         ),
         cohort_retention AS (
             SELECT
                 fs.cohort_week,
-                COUNT(DISTINCT fs.user_id)::int             AS cohort_size,
-                (a.active_week - fs.cohort_week) / 7        AS week_number,
-                COUNT(DISTINCT a.user_id)::int              AS retained
+                COUNT(DISTINCT fs.user_id)::int                    AS cohort_size,
+                ((a.active_week - fs.cohort_week) / 7)::int        AS week_number,
+                COUNT(DISTINCT a.user_id)::int                     AS retained
             FROM   first_seen fs
             JOIN   activity   a  ON a.user_id = fs.user_id
                                  AND a.active_week >= fs.cohort_week
-                                 AND a.active_week <= fs.cohort_week + ($1 * 7 - 1)
+                                 AND a.active_week <= fs.cohort_week + make_interval(weeks => ($1::int - 1))
             GROUP  BY fs.cohort_week, week_number
         )
         SELECT cohort_week::text,
@@ -408,7 +408,7 @@ async def _fetch_retention_data(
         FROM   cohort_retention
         ORDER  BY cohort_week, week_number
         """,
-        str(weeks),
+        weeks,
     )
 
     # Group into cohort objects
