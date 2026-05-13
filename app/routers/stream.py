@@ -176,7 +176,7 @@ async def stream_events(
     org_id = verify_jwt_get_org_id(credentials.credentials)
 
     return StreamingResponse(
-        _event_generator(request, pool, org_id, cursor),
+        _event_generator(request, pool, str(org_id), cursor),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
