@@ -320,7 +320,7 @@ export default function FunnelsPage() {
   const [funnels,     setFunnels]     = useState<Funnel[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
-  useSWR('funnels', listFunnels, { onSuccess: setFunnels });
+  const { isLoading: funnelsLoading } = useSWR('funnels', listFunnels, { onSuccess: setFunnels });
   useSWR('funnel-events', listFunnelEvents, {
     onSuccess: setSuggestions,
     revalidateOnFocus: false,
@@ -377,7 +377,12 @@ export default function FunnelsPage() {
       <div className="grid grid-cols-[280px_1fr] gap-6">
         {/* Sidebar: list of funnels */}
         <div className="space-y-2">
-          {funnels.length === 0 && editing !== 'new' && (
+          {funnelsLoading && funnels.length === 0 && (
+            <div className="card py-8 space-y-2">
+              {[1,2,3].map(i => <div key={i} className="h-4 bg-gray-100 rounded animate-pulse" />)}
+            </div>
+          )}
+          {!funnelsLoading && funnels.length === 0 && editing !== 'new' && (
             <div className="card text-center py-8">
               <p className="text-sm text-gray-400">No funnels yet</p>
               <button
