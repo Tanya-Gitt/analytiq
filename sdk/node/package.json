@@ -1,0 +1,22 @@
+{
+  "name": "@analytiq/node",
+  "version": "0.1.0",
+  "description": "Server-side Node.js SDK for Analytics Platform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test dist/index.test.js"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

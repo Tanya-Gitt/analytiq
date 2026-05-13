@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "analytiq"
+version = "0.1.0"
+description = "Server-side Python SDK for Analytics Platform"
+requires-python = ">=3.9"
+dependencies = []   # zero required deps — httpx is optional for async
+
+[project.optional-dependencies]
+async = ["httpx>=0.27.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
