@@ -395,7 +395,7 @@ export default function CopilotPage() {
                 type="text"
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                placeholder="Ask about your data… e.g. "Which channels drove the most revenue?""
+                placeholder={'Ask about your data — e.g. "Which channels drove the most revenue?"'}
                 disabled={loading}
                 className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-sm
                            placeholder:text-gray-400 focus:outline-none focus:ring-2
