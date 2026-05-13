@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from app.database import close_pool, create_pool
 from app.routers import alerts as alerts_router
 from app.routers import annotations as annotations_router
+from app.routers import anomalies as anomalies_router
 from app.routers import auth as auth_router
 from app.routers import connectors as connectors_router
 from app.routers import dashboard as dashboard_router
@@ -84,6 +85,7 @@ app.include_router(annotations_router.router, prefix="/api",     tags=["annotati
 app.include_router(team_router.router,        prefix="/api",      tags=["team"])
 app.include_router(funnels_router.router,     prefix="/api",      tags=["funnels"])
 app.include_router(sso_router.router,         prefix="/api/auth", tags=["sso"])
+app.include_router(anomalies_router.router,   prefix="/api",      tags=["anomalies"])
 
 # ── Static: JS SDK ────────────────────────────────────────────────────────────
 # Serves sdk/analytics.js at /sdk/analytics.js

@@ -487,6 +487,37 @@ export function acceptInvite(token: string, password: string) {
   });
 }
 
+// ── Anomaly Detection ─────────────────────────────────────────────────────────
+
+export interface AnomalyEvent {
+  id:          number;
+  metric:      string;
+  value:       number;
+  baseline:    number;
+  std_dev:     number;
+  z_score:     number;
+  direction:   'high' | 'low';
+  severity:    'warning' | 'critical';
+  detected_at: string;
+}
+
+export interface AnomalySummary {
+  last_24h:    number;
+  last_7d:     number;
+  critical_24h: number;
+  warning_24h:  number;
+}
+
+export function listAnomalies(metric?: string, limit = 50) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (metric) params.set('metric', metric);
+  return request<AnomalyEvent[]>(`/anomalies?${params}`);
+}
+
+export function getAnomalySummary() {
+  return request<AnomalySummary>('/anomalies/summary');
+}
+
 // ── SSO config ────────────────────────────────────────────────────────────────
 
 export interface SSOConfig {

@@ -31,6 +31,7 @@ from app.connectors.sync import sync_connector
 from app.database import _init_connection  # JSONB codec registration
 
 from .alert_evaluator import evaluate_alerts
+from .anomaly_detector import run_anomaly_detection
 from .digest import send_weekly_digest
 
 logging.basicConfig(
@@ -162,6 +163,13 @@ async def _alert_eval(pool: asyncpg.Pool) -> None:
         logger.exception("Unhandled exception in evaluate_alerts")
 
 
+async def _anomaly_detection(pool: asyncpg.Pool) -> None:
+    try:
+        await run_anomaly_detection(pool)
+    except Exception:  # noqa: BLE001
+        logger.exception("Unhandled exception in run_anomaly_detection")
+
+
 # ── entry point ───────────────────────────────────────────────────────────────
 
 async def run_scheduler() -> None:  # pragma: no cover
@@ -205,6 +213,16 @@ async def run_scheduler() -> None:  # pragma: no cover
         args=[pool],
         id="alert_eval",
         next_run_time=now_utc + timedelta(seconds=_ALERT_STAGGER_SECONDS),
+    )
+
+    # Anomaly detection: every hour at :05 past (after alert eval settles)
+    scheduler.add_job(
+        _anomaly_detection,
+        "cron",
+        minute=5,
+        args=[pool],
+        id="anomaly_detection",
+        timezone="UTC",
     )
 
     # Weekly digest: every Monday at 09:00 UTC.
