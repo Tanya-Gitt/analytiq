@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import AppShell from '@/components/layout/AppShell';
 import { getMe, getSetupStatus, type SetupStatus } from '@/lib/api';
@@ -24,23 +24,70 @@ function fmtNumber(n: number) {
   return String(n);
 }
 
-// ── Copy button ───────────────────────────────────────────────────────────────
+// ── Copy button (dark background — used inside CodeBlock header) ──────────────
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   function copy() {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    navigator.clipboard.writeText(text).then(
+      () => { setCopied(true); setTimeout(() => setCopied(false), 2000); },
+      () => {
+        // Fallback for non-HTTPS
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      },
+    );
   }
   return (
     <button
       onClick={copy}
-      className="shrink-0 text-xs px-2 py-1 rounded-md font-medium transition-colors
-                 bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white"
+      className="shrink-0 text-xs px-2.5 py-1 rounded-md font-medium transition-colors
+                 bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white border border-white/10"
     >
-      {copied ? 'Copied!' : 'Copy'}
+      {copied ? '✓ Copied' : 'Copy'}
+    </button>
+  );
+}
+
+// ── API key inline copy (light background) ────────────────────────────────────
+
+function ApiKeyCopy({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(text).then(
+      () => { setCopied(true); setTimeout(() => setCopied(false), 2000); },
+      () => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      },
+    );
+  }
+  return (
+    <button
+      onClick={copy}
+      className={`shrink-0 text-xs px-3 py-1.5 rounded-lg font-medium transition-colors border ${
+        copied
+          ? 'bg-green-50 text-green-700 border-green-200'
+          : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200'
+      }`}
+    >
+      {copied ? '✓ Copied' : 'Copy'}
     </button>
   );
 }
@@ -209,8 +256,9 @@ function StatusBanner({ status, loading }: { status: SetupStatus | undefined; lo
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SetupPage() {
-  const [lang, setLang] = useState<Lang>('Browser');
-  const [host, setHost] = useState('');
+  const [lang,    setLang]    = useState<Lang>('Browser');
+  const [host,    setHost]    = useState('');
+  const [showKey, setShowKey] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -223,8 +271,9 @@ export default function SetupPage() {
     refreshInterval: 10_000,
   });
 
-  const apiKey = me?.api_key ?? '…loading…';
-  const code   = snippets(apiKey, host || 'https://your-host.com');
+  const apiKey    = me?.api_key ?? '';
+  const maskedKey = apiKey ? '•'.repeat(24) + apiKey.slice(-8) : '…loading…';
+  const code      = snippets(apiKey || 'YOUR_API_KEY', host || 'https://your-host.com');
 
   return (
     <AppShell>
@@ -246,15 +295,39 @@ export default function SetupPage() {
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
             Your API Key
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <code className="flex-1 font-mono text-sm bg-gray-50 border border-gray-200
-                             rounded-xl px-4 py-2.5 text-gray-800 overflow-x-auto">
-              {apiKey}
+                             rounded-xl px-4 py-2.5 text-gray-800 overflow-x-auto tracking-wider">
+              {showKey ? apiKey || '…loading…' : maskedKey}
             </code>
-            <CopyButton text={apiKey} />
+
+            {/* Show / hide toggle */}
+            <button
+              onClick={() => setShowKey(v => !v)}
+              title={showKey ? 'Hide key' : 'Reveal key'}
+              className="shrink-0 p-2 rounded-lg text-gray-400 hover:text-gray-700
+                         hover:bg-gray-100 transition-colors border border-gray-200"
+            >
+              {showKey ? (
+                /* eye-slash */
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                </svg>
+              ) : (
+                /* eye */
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              )}
+            </button>
+
+            <ApiKeyCopy text={apiKey || ''} />
           </div>
           <p className="mt-2 text-xs text-gray-400">
-            Pass this as the first argument to any SDK. Keep it secret — it identifies your org.
+            Keep this secret — it identifies your org. Reveal to copy, then store safely.
           </p>
         </div>
 

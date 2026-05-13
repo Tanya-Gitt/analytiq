@@ -394,7 +394,7 @@ export default function FunnelsPage() {
               onClick={() => { setSelected(f); setEditing(null); }}
               className={`card cursor-pointer transition-all group ${
                 selected?.id === f.id
-                  ? 'ring-2 ring-indigo-500 ring-offset-1'
+                  ? '!border-indigo-300 bg-indigo-50/40 shadow-md'
                   : 'hover:border-gray-300'
               }`}
             >
