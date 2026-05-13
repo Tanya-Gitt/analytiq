@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { StorageStats, ArchivedEvent, getStorageStats, archiveEvents, listArchivedEvents } from '@/lib/api';
+import AppShell from '@/components/layout/AppShell';
+import { type StorageStats, type ArchivedEvent, getStorageStats, archiveEvents, listArchivedEvents } from '@/lib/api';
 
 function fmt(n: number) { return n.toLocaleString(); }
 
@@ -49,6 +50,7 @@ export default function StoragePage() {
   const archPct = 100 - hotPct;
 
   return (
+    <AppShell>
     <div className="p-6 max-w-4xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Tiered Storage</h1>
@@ -158,5 +160,6 @@ export default function StoragePage() {
         )}
       </div>
     </div>
+    </AppShell>
   );
 }

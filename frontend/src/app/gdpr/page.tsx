@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
+import AppShell from '@/components/layout/AppShell';
 import {
   GdprOptOut,
   GdprExport,
@@ -82,6 +83,7 @@ export default function GdprPage() {
   }
 
   return (
+    <AppShell>
     <div className="p-6 max-w-4xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">GDPR / CCPA Compliance</h1>
@@ -212,5 +214,6 @@ export default function GdprPage() {
         )}
       </div>
     </div>
+    </AppShell>
   );
 }

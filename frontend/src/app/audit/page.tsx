@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
+import AppShell from '@/components/layout/AppShell';
 import { type AuditPage, listAudit } from '@/lib/api';
 
 const CATEGORIES = [
@@ -51,6 +52,7 @@ export default function AuditPage() {
   }
 
   return (
+    <AppShell>
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
@@ -152,5 +154,6 @@ export default function AuditPage() {
         </div>
       )}
     </div>
+    </AppShell>
   );
 }
