@@ -31,12 +31,17 @@ function SortableStep({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id });
+  const [open, setOpen] = useState(false);
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+
+  const filtered = value
+    ? suggestions.filter(s => s.toLowerCase().includes(value.toLowerCase()))
+    : suggestions;
 
   return (
     <div ref={setNodeRef} style={style} className="flex items-center gap-2">
@@ -57,15 +62,28 @@ function SortableStep({
         <input
           type="text"
           value={value}
-          onChange={e => onChange(e.target.value)}
-          list={`suggestions-${id}`}
+          onChange={e => { onChange(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder="Event name…"
+          autoComplete="off"
           className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2
                      focus:outline-none focus:ring-2 focus:ring-indigo-400"
         />
-        <datalist id={`suggestions-${id}`}>
-          {suggestions.map(s => <option key={s} value={s} />)}
-        </datalist>
+        {open && filtered.length > 0 && (
+          <ul className="absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto
+                         bg-white border border-gray-200 rounded-lg shadow-lg text-sm">
+            {filtered.map(s => (
+              <li
+                key={s}
+                onMouseDown={() => { onChange(s); setOpen(false); }}
+                className="px-3 py-2 cursor-pointer hover:bg-indigo-50 hover:text-indigo-700"
+              >
+                {s}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <button
