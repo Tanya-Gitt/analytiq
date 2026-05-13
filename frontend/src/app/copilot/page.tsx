@@ -283,8 +283,8 @@ export default function CopilotPage() {
   const isEmpty = messages.length === 0;
 
   return (
-    <AppShell>
-      <div className="flex flex-col h-[calc(100vh-0px)] max-h-screen">
+    <AppShell fullBleed>
+      <div className="flex flex-col h-full">
 
         {/* ── Header ── */}
         <div className="px-6 pt-6 pb-4 border-b border-gray-100 bg-white shrink-0">
