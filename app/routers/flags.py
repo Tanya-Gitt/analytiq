@@ -134,7 +134,7 @@ def _evaluate_flag(flag: dict, user_id: str | None, attributes: dict) -> bool:
 
 @router.get("/flags")
 async def list_flags(db: asyncpg.Connection = Depends(get_org_db)):
-    rows = await db.fetch("SELECT * FROM feature_flags ORDER BY created_at DESC")
+    rows = await db.fetch("SELECT * FROM feature_flags ORDER BY created_at DESC, name ASC")
     return [_row_to_flag(r) for r in rows]
 
 

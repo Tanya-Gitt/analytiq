@@ -231,14 +231,29 @@ function FlagModal({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+// Stable sort: newest first, then alphabetical — matches backend ORDER BY
+function stableSort(list: FeatureFlag[]): FeatureFlag[] {
+  return [...list].sort((a, b) => {
+    const td = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    if (td !== 0) return td;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 export default function FlagsPage() {
-  const { data: flags, isLoading, mutate } = useSWR('flags', listFlags, { refreshInterval: 30_000 });
+  const { data: rawFlags, isLoading, mutate } = useSWR('flags', listFlags, { refreshInterval: 30_000 });
   const [modal,  setModal]  = useState<Partial<FeatureFlag> | null | false>(false);
   const [deleting, setDeleting] = useState<FeatureFlag | null>(null);
 
+  // Always render in stable order so server re-fetches never shuffle the list
+  const flags = rawFlags ? stableSort(rawFlags) : rawFlags;
+
   async function handleToggle(flag: FeatureFlag) {
-    // Optimistic update: flip locally first so the list never flashes empty
-    mutate(flags?.map(f => f.id === flag.id ? { ...f, enabled: !f.enabled } : f), false);
+    // Optimistic: flip the flag in-place, preserve current sorted order
+    mutate(
+      flags?.map(f => f.id === flag.id ? { ...f, enabled: !f.enabled } : f),
+      false,
+    );
     try {
       await updateFlag(flag.id, { enabled: !flag.enabled });
     } finally {
