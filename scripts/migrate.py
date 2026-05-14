@@ -62,6 +62,11 @@ async def run() -> None:
                 END IF;
             END $$;
         """)
+        # Grant app_role membership to the current DB user (e.g. neondb_owner on Neon,
+        # postgres in Docker). This is required so the app can do SET LOCAL ROLE app_role
+        # inside transactions to enforce RLS policies.
+        # GRANT is idempotent — granting a role the user already has is a no-op.
+        await conn.execute("GRANT app_role TO CURRENT_USER")
 
         print("[migrate] applying schema.sql …", flush=True)
         await conn.execute(SCHEMA_PATH.read_text())
