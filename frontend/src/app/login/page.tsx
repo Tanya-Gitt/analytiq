@@ -78,6 +78,25 @@ function LoginInner() {
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
+
+  async function handleDemo() {
+    setDemoLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`${BASE}/auth/demo-login`, { method: 'POST' });
+      if (!res.ok) throw new Error('Demo unavailable');
+      const data = await res.json();
+      setToken(data.access_token);
+      setApiKey(data.api_key);
+      setOrgId(data.org_id);
+      router.push('/dashboard');
+    } catch {
+      setError('Demo login failed — please try again.');
+    } finally {
+      setDemoLoading(false);
+    }
+  }
 
   // Surface errors from SSO callback redirect (?error=...)
   useEffect(() => {
@@ -124,6 +143,23 @@ function LoginInner() {
               {error}
             </div>
           )}
+
+          {/* Demo button */}
+          <button
+            type="button"
+            onClick={handleDemo}
+            disabled={demoLoading}
+            className="flex items-center justify-center gap-2 w-full rounded-xl px-4 py-2.5
+                       bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60
+                       text-white text-sm font-semibold transition-colors shadow-sm"
+          >
+            {demoLoading ? (
+              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <span>⚡</span>
+            )}
+            {demoLoading ? 'Loading demo…' : 'Try live demo — no sign up needed'}
+          </button>
 
           {/* SSO Buttons */}
           <div className="space-y-2.5">
