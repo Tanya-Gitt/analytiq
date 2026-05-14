@@ -1,0 +1,193 @@
+"""
+One-time demo data seed endpoint.
+
+POST /api/internal/seed?secret=<SEED_SECRET>
+
+Runs the seed script inline using the app's existing DB pool.
+Protected by a static secret set via SEED_SECRET env var.
+Remove this router (or the env var) after seeding.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import random
+from datetime import datetime, timedelta, timezone
+
+import asyncpg
+import bcrypt
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.database import get_pool
+
+router = APIRouter()
+
+_SECRET = os.environ.get("SEED_SECRET", "")
+
+DEMO_ORG_NAME = "Analytiq Demo"
+DEMO_EMAIL    = "demo@analytiq.io"
+DEMO_PASSWORD = "DemoAnalytiq2024!"
+
+rng   = random.Random(42)
+NOW   = datetime.now(timezone.utc)
+START = NOW - timedelta(days=365)
+
+POWER_USERS      = [f"usr_power_{i:03d}"      for i in range(1,  51)]
+REGULAR_USERS    = [f"usr_regular_{i:03d}"    for i in range(1, 201)]
+OCCASIONAL_USERS = [f"usr_occasional_{i:03d}" for i in range(1, 251)]
+CHURNED_USERS    = [f"usr_churned_{i:03d}"    for i in range(1, 101)]
+ALL_ACTIVE       = POWER_USERS + REGULAR_USERS + OCCASIONAL_USERS
+
+PAGES    = ["/", "/dashboard", "/events", "/funnels", "/people", "/settings", "/pricing", "/docs"]
+FEATURES = ["funnel_builder", "retention_chart", "cohort_analysis", "ai_copilot", "data_export", "custom_dashboard"]
+BROWSERS = ["Chrome", "Firefox", "Safari", "Edge"]
+COUNTRIES= ["IN", "US", "GB", "DE", "SG", "AU", "CA", "FR"]
+PLANS    = ["starter", "pro", "enterprise"]
+PLAN_PRICES = {"starter": 29.0, "pro": 79.0, "enterprise": 299.0}
+PLAN_ANNUAL = {"starter": 290.0, "pro": 790.0, "enterprise": 2990.0}
+
+_ENAMES  = ["page_view","button_click","identify","search","feature_used","purchase","signup","error","video_play","onboarding_complete"]
+_EWEIGHTS= [38, 20, 6, 8, 12, 3, 3, 2, 4, 4]
+
+SPIKE_DAYS = {300: 4.5, 210: 7.0, 160: 5.0, 90: 0.7, 30: 6.0, 7: 3.5}
+
+
+def _vol(day: int) -> int:
+    t  = day / 364.0
+    b  = 100 + 500 / (1 + math.exp(-8 * (t - 0.45)))
+    dow= (START + timedelta(days=day)).weekday()
+    sf = {0:1.0,1:1.05,2:1.0,3:0.95,4:0.85,5:0.6,6:0.5}[dow]
+    sp = 1.0
+    for sd, m in SPIKE_DAYS.items():
+        if abs((364-day)-sd) <= 1:
+            sp = max(sp, m)
+    return max(20, int(b * sf * sp * rng.uniform(0.88, 1.12)))
+
+
+def _evt(org_id: str, day: int) -> tuple:
+    dt = START + timedelta(days=day, seconds=rng.randint(0, 86399))
+    en = rng.choices(_ENAMES, weights=_EWEIGHTS, k=1)[0]
+    dr = 364 - day
+    pool = (POWER_USERS*6 + REGULAR_USERS*3 + OCCASIONAL_USERS + CHURNED_USERS*2) if dr > 70 else (POWER_USERS*8 + REGULAR_USERS*4 + OCCASIONAL_USERS)
+    uid = rng.choice(pool)
+    props: dict = {"platform": rng.choice(["web","mobile_web"]), "browser": rng.choice(BROWSERS), "country": rng.choice(COUNTRIES)}
+    if en == "page_view":    props.update({"page": rng.choice(PAGES), "duration_s": rng.randint(5,420)})
+    elif en == "feature_used": props["feature"] = rng.choice(FEATURES)
+    elif en == "purchase":
+        pl = rng.choice(PLANS)
+        ann = rng.random() < 0.35
+        props.update({"plan": pl, "amount": PLAN_ANNUAL[pl] if ann else PLAN_PRICES[pl], "billing": "annual" if ann else "monthly"})
+    return (org_id, en, uid, None, json.dumps(props), dt)
+
+
+def _order(org_id: str, day: int) -> tuple:
+    dt  = START + timedelta(days=day, seconds=rng.randint(0,86399))
+    pl  = rng.choices(PLANS, weights=[50,35,15], k=1)[0]
+    ann = rng.random() < 0.30
+    return (org_id, rng.choice(ALL_ACTIVE), json.dumps({"plan":pl,"amount":PLAN_ANNUAL[pl] if ann else PLAN_PRICES[pl],"billing":"annual" if ann else "monthly","country":rng.choice(COUNTRIES)}), dt)
+
+
+@router.post("/internal/seed", status_code=202)
+async def seed_demo(secret: str = "", pool: asyncpg.Pool = Depends(get_pool)):
+    if not _SECRET or secret != _SECRET:
+        raise HTTPException(403, "invalid or missing secret")
+
+    async with pool.acquire() as conn:
+        exists = await conn.fetchval("SELECT id FROM orgs WHERE name = $1", DEMO_ORG_NAME)
+        if exists:
+            return {"status": "already_seeded", "org_id": str(exists)}
+
+    pw = bcrypt.hashpw(DEMO_PASSWORD.encode(), bcrypt.gensalt(rounds=10)).decode()
+
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            org  = await conn.fetchrow("INSERT INTO orgs (name) VALUES ($1) RETURNING id, api_key", DEMO_ORG_NAME)
+            oid  = str(org["id"])
+            user = await conn.fetchrow(
+                "INSERT INTO users (org_id, email, password_hash, role) VALUES ($1::uuid,$2,$3,'admin') RETURNING id",
+                oid, DEMO_EMAIL, pw)
+            uid = str(user["id"])
+
+    async def _ctx(c): await c.execute(f"SET LOCAL app.org_id = '{oid}'")
+
+    # Events
+    ev_batch, total_e = [], 0
+    INS_E = "INSERT INTO events (org_id,event_name,user_id,anonymous_id,properties,received_at) VALUES ($1::uuid,$2,$3,$4,$5,$6)"
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await _ctx(conn)
+            for day in range(365):
+                for _ in range(_vol(day)):
+                    ev_batch.append(_evt(oid, day))
+                    if len(ev_batch) >= 500:
+                        await conn.executemany(INS_E, ev_batch)
+                        total_e += len(ev_batch)
+                        ev_batch.clear()
+            if ev_batch:
+                await conn.executemany(INS_E, ev_batch)
+                total_e += len(ev_batch)
+
+    # Orders
+    or_batch, total_o = [], 0
+    INS_O = "INSERT INTO orders (org_id,user_id,properties,created_at) VALUES ($1::uuid,$2,$3,$4)"
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await _ctx(conn)
+            for day in range(365):
+                n = max(1, int((3 + 22*(day/364)) * rng.uniform(0.7,1.3)))
+                for _ in range(n):
+                    or_batch.append(_order(oid, day))
+                    if len(or_batch) >= 500:
+                        await conn.executemany(INS_O, or_batch)
+                        total_o += len(or_batch)
+                        or_batch.clear()
+            if or_batch:
+                await conn.executemany(INS_O, or_batch)
+                total_o += len(or_batch)
+
+    # Misc: connectors, alerts, funnels, flags, annotations, anomalies
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await _ctx(conn)
+            await conn.executemany(
+                "INSERT INTO connectors (org_id,type,name,config,status,last_synced_at) VALUES ($1::uuid,$2,$3,$4,$5,$6)",
+                [(oid,"stripe","Stripe Production",json.dumps({"mode":"live"}),"active",NOW-timedelta(days=1)),
+                 (oid,"csv","Monthly Cohort CSV",json.dumps({"schedule":"weekly"}),"active",NOW-timedelta(days=3)),
+                 (oid,"webhook","Zapier Webhook",json.dumps({"events":["purchase","signup"]}),"paused",NOW-timedelta(days=14))])
+            await conn.executemany(
+                "INSERT INTO alert_rules (org_id,name,metric,operator,threshold,period_minutes,channels,enabled) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8)",
+                [(oid,"DAU drops below 30","dau","lt",30,1440,json.dumps(["email"]),True),
+                 (oid,"Daily revenue below $200","revenue_total","lt",200,1440,json.dumps(["email","slack"]),True),
+                 (oid,"Error rate above 5%","error_rate","gt",5,60,json.dumps(["slack"]),True)])
+            await conn.executemany(
+                "INSERT INTO funnels (org_id,name,steps) VALUES ($1::uuid,$2,$3)",
+                [(oid,"Signup to Paid",json.dumps(["page_view","signup","onboarding_complete","purchase"])),
+                 (oid,"Feature Adoption",json.dumps(["signup","feature_used","feature_used","purchase"]))])
+            await conn.executemany(
+                "INSERT INTO feature_flags (org_id,name,description,enabled,rollout_pct,targeting) VALUES ($1::uuid,$2,$3,$4,$5,$6)",
+                [(oid,"ai_copilot_beta","AI Copilot (beta)",True,25,json.dumps([])),
+                 (oid,"new_dashboard_v2","Redesigned dashboard",True,75,json.dumps([])),
+                 (oid,"dark_mode","Dark mode UI",True,50,json.dumps([])),
+                 (oid,"bulk_export","Bulk data export",True,10,json.dumps([])),
+                 (oid,"pdf_reports","PDF report attachments",True,100,json.dumps([]))])
+            await conn.executemany(
+                "INSERT INTO annotations (org_id,segment,date,label,color) VALUES ($1::uuid,$2,$3,$4,$5)",
+                [(oid,"A",(NOW-timedelta(days=300)).date(),"Beta launch 🚀","#10b981"),
+                 (oid,"A",(NOW-timedelta(days=210)).date(),"Product Hunt #1 🏆","#f59e0b"),
+                 (oid,"B",(NOW-timedelta(days=160)).date(),"TechCrunch coverage 📰","#6366f1"),
+                 (oid,"A",(NOW-timedelta(days=90)).date(),"Pricing update 💰","#ef4444"),
+                 (oid,"A",(NOW-timedelta(days=30)).date(),"v2.0 Release 🎉","#3b82f6"),
+                 (oid,"B",(NOW-timedelta(days=7)).date(),"Enterprise partnership 🤝","#8b5cf6")])
+            await conn.executemany(
+                "INSERT INTO anomaly_events (org_id,metric,value,baseline,std_dev,z_score,direction,severity,detected_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9)",
+                [(oid,"events_count",4200,600,80,45.0,"high","critical",NOW-timedelta(days=210)),
+                 (oid,"revenue_total",85,1800,220,-7.8,"low","critical",NOW-timedelta(days=45)),
+                 (oid,"events_count",5800,900,110,44.5,"high","critical",NOW-timedelta(days=30))])
+            await conn.executemany(
+                "INSERT INTO scheduled_reports (org_id,name,metric,period,recipients,enabled,created_by,last_run_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7::uuid,$8)",
+                [(oid,"Weekly DAU Summary","dau","weekly",[DEMO_EMAIL],True,uid,NOW-timedelta(days=7)),
+                 (oid,"Monthly Revenue Report","revenue_total","monthly",[DEMO_EMAIL],True,uid,NOW-timedelta(days=30))])
+
+    return {"status": "seeded", "org_id": oid, "events": total_e, "orders": total_o}

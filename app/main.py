@@ -44,6 +44,7 @@ from app.routers import ingest as ingest_router
 from app.routers import paths as paths_router
 from app.routers import people as people_router
 from app.routers import reports as reports_router
+from app.routers import seed as seed_router
 from app.routers import schema_registry as schema_registry_router
 from app.routers import setup as setup_router
 from app.routers import share as share_router
@@ -141,6 +142,7 @@ app.include_router(api_keys_router.router,         prefix="/api",      tags=["ap
 app.include_router(reports_router.router,          prefix="/api",      tags=["reports"])
 app.include_router(system_router.router,           prefix="/api",      tags=["system"])
 app.include_router(embed_router.router,            prefix="/api",      tags=["embed"])
+app.include_router(seed_router.router,             prefix="/api",      tags=["internal"])
 
 # ── Static: JS SDK ────────────────────────────────────────────────────────────
 # Serves sdk/analytics.js at /sdk/analytics.js
