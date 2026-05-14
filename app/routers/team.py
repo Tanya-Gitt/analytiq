@@ -49,9 +49,18 @@ class AcceptInviteRequest(BaseModel):
 
     @field_validator("password")
     @classmethod
-    def password_min_length(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("password must be at least 8 characters")
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 12:
+            raise ValueError("password must be at least 12 characters")
+        if not any(c.isupper() for c in v):
+            raise ValueError("password must contain at least one uppercase letter")
+        if not any(c.islower() for c in v):
+            raise ValueError("password must contain at least one lowercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("password must contain at least one digit")
+        _common = {"password", "password1", "12345678", "123456789", "qwerty123"}
+        if v.lower() in _common:
+            raise ValueError("password is too common — choose a stronger password")
         return v
 
 
@@ -119,19 +128,15 @@ async def invite_member(
     invite_url = f"/invite/{row['token']}"
     try:
         await send_email(
-            to_addr=body.email,
+            to=[body.email],
             subject=f"You've been invited to join {org_name} on Analytiq",
             body=(
-                f"You've been invited to join {org_name} as a {body.role}.\n\n"
-                f"Accept your invite: {invite_url}\n\n"
-                f"This invite expires on {row['expires_at'].strftime('%Y-%m-%d')}."
-            ),
-            html_body=(
                 f"<p>You've been invited to join <strong>{org_name}</strong> "
                 f"as a <strong>{body.role}</strong>.</p>"
                 f"<p><a href='{invite_url}'>Accept invite</a></p>"
                 f"<p><small>Expires {row['expires_at'].strftime('%Y-%m-%d')}.</small></p>"
             ),
+            html=True,
         )
     except Exception:
         pass  # Email failure doesn't block the invite being created

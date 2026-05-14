@@ -9,7 +9,7 @@ GET  /api/storage/archived — query archived events (paginated)
 from __future__ import annotations
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from app.audit_log import log_action

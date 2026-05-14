@@ -7,7 +7,7 @@ POST /api/anomalies/backfill   — trigger immediate baseline + detection run (a
 from __future__ import annotations
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
 from app.deps import get_org_db
 

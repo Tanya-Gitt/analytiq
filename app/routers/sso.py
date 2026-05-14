@@ -26,18 +26,16 @@ Environment variables (global providers, set in .env):
 
 from __future__ import annotations
 
-import hashlib
-import json
+import ipaddress
 import logging
 import os
 import secrets
 import time
-from typing import Any
-from uuid import UUID
+import urllib.parse
 
 import asyncpg
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
@@ -81,11 +79,60 @@ _CACHE_TTL = 3600  # 1 hour
 _CACHE_TS: dict[str, float] = {}
 
 
+def _validate_discovery_url(url: str) -> None:
+    """
+    Block SSRF attacks via malicious OIDC discovery URLs.
+
+    Rejects:
+      - Non-https schemes (http, file, ftp, etc.)
+      - Private / link-local / loopback IP ranges (RFC 1918, RFC 3927, ::1 …)
+      - Cloud IMDS endpoints (169.254.169.254, fd00:ec2::254)
+      - Empty or unparseable URLs
+    """
+    if not url:
+        raise HTTPException(400, "discovery_url must not be empty")
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except Exception:
+        raise HTTPException(400, "discovery_url is not a valid URL")
+
+    if parsed.scheme not in ("https",):
+        raise HTTPException(400, "discovery_url must use HTTPS")
+
+    hostname = parsed.hostname or ""
+    if not hostname:
+        raise HTTPException(400, "discovery_url must have a hostname")
+
+    # Reject bare IP addresses that resolve to private ranges
+    try:
+        addr = ipaddress.ip_address(hostname)
+        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+            raise HTTPException(400, "discovery_url must not point to a private/internal address")
+        # AWS IMDS and GCP metadata endpoints
+        if hostname in ("169.254.169.254", "fd00:ec2::254", "metadata.google.internal"):
+            raise HTTPException(400, "discovery_url must not point to a cloud metadata endpoint")
+    except ValueError:
+        # Not an IP address — hostname-based, allow it
+        # (Runtime DNS resolution to a private IP is an edge case
+        # mitigated by the network layer; no reliable fix without egress filtering)
+        pass
+
+    # Block well-known internal hostnames
+    blocked_hosts = {
+        "localhost", "postgres", "redis", "db", "internal",
+        "metadata.google.internal",
+    }
+    if hostname.lower() in blocked_hosts:
+        raise HTTPException(400, "discovery_url must not point to an internal service")
+
+
 async def _get_discovery(discovery_base: str) -> dict:
     now = time.monotonic()
     if discovery_base in _DISCOVERY_CACHE and (now - _CACHE_TS.get(discovery_base, 0)) < _CACHE_TTL:
         return _DISCOVERY_CACHE[discovery_base]
     url = f"{discovery_base.rstrip('/')}/.well-known/openid-configuration"
+    # Validate before making the request (SSRF guard)
+    _validate_discovery_url(url)
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, timeout=10)
         resp.raise_for_status()
@@ -397,11 +444,15 @@ async def sso_callback(
 
     token = create_access_token(user_id=user_id, org_id=resolved_org_id, role=role)
 
-    # Redirect to frontend — frontend reads ?token= from URL and stores it
-    # Honour the original redirect_to path (default /dashboard)
+    # Pass the JWT via URL fragment (#) rather than query string (?).
+    # Fragments are NOT sent in HTTP Referer headers and do NOT appear in
+    # nginx/server access logs, preventing token leakage to third parties
+    # or log aggregators.
+    # The frontend's /auth/sso-success page reads window.location.hash.
     dest = redirect_to if redirect_to.startswith("/") else "/dashboard"
+    encoded_next = urllib.parse.quote(dest, safe="")
     return RedirectResponse(
-        f"{base}/auth/sso-success?token={token}&org_id={resolved_org_id}&next={dest}",
+        f"{base}/auth/sso-success#token={token}&org_id={resolved_org_id}&next={encoded_next}",
         status_code=302,
     )
 
@@ -584,10 +635,14 @@ async def create_sso_config(
     if body.provider == "oidc" and not body.discovery_url:
         raise HTTPException(status_code=400, detail="discovery_url is required for oidc provider")
 
-    # Validate discovery URL reachability
+    # Validate discovery URL (SSRF guard + reachability check)
     if body.discovery_url:
+        # Raises HTTPException with specific message if URL is invalid/internal
+        _validate_discovery_url(f"{body.discovery_url.rstrip('/')}/.well-known/openid-configuration")
         try:
             await _get_discovery(body.discovery_url)
+        except HTTPException:
+            raise   # propagate SSRF / validation errors as-is
         except Exception:
             raise HTTPException(
                 status_code=400,

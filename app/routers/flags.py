@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.audit_log import log_action
-from app.deps import get_current_user, get_org_db
+from app.deps import get_org_db, get_org_db_by_api_key, require_admin
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -143,7 +143,7 @@ async def list_flags(db: asyncpg.Connection = Depends(get_org_db)):
 async def create_flag(
     body:         FlagCreate,
     db:           asyncpg.Connection = Depends(get_org_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin),
 ):
     try:
         row = await db.fetchrow(
@@ -168,7 +168,7 @@ async def update_flag(
     flag_id:      str,
     body:         FlagPatch,
     db:           asyncpg.Connection = Depends(get_org_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin),
 ):
     existing = await db.fetchrow(
         "SELECT * FROM feature_flags WHERE id = $1::uuid", flag_id
@@ -200,7 +200,7 @@ async def update_flag(
 async def delete_flag(
     flag_id:      str,
     db:           asyncpg.Connection = Depends(get_org_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin),
 ):
     existing = await db.fetchrow("SELECT name FROM feature_flags WHERE id = $1::uuid", flag_id)
     result = await db.execute(
@@ -213,15 +213,18 @@ async def delete_flag(
                      metadata={"name": existing["name"] if existing else ""})
 
 
-@router.post("/flags/evaluate")
+@router.post("/flags/evaluate/{org_api_key}")
 async def evaluate_flags(
+    org_api_key: str,
     body: EvaluateRequest,
-    db:   asyncpg.Connection = Depends(get_org_db),
+    db:   asyncpg.Connection = Depends(get_org_db_by_api_key),
 ):
     """
     Evaluate all enabled flags for a given user_id + attributes.
     Returns a dict of {flag_name: bool}.
-    Called from SDK / server-side code — no additional auth needed beyond API key in URL.
+
+    Authenticated by org API key in the URL path (same pattern as /api/ingest/{key})
+    so the JS SDK can call this without a JWT Bearer token.
     """
     rows = await db.fetch(
         "SELECT * FROM feature_flags WHERE enabled = true ORDER BY name"

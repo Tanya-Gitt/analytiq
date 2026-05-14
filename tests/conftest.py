@@ -3,7 +3,7 @@ Shared test fixtures for the Unified Analytics Platform.
 
 Setup:
   - Real PostgreSQL instance (pytest-postgresql spins up a temporary PG)
-  - Schema applied from db/schema.sql
+  - Schema applied from db/schema.sql + all db/migrations/*.sql (sorted)
   - Two test orgs (org_a, org_b) for cross-tenant isolation tests
   - httpx AsyncClient for end-to-end route tests
 
@@ -39,7 +39,8 @@ load_dotenv(Path(__file__).parent.parent / ".env", override=False)
 
 # ── Database fixtures ─────────────────────────────────────────────────────────
 
-SCHEMA_PATH = Path(__file__).parent.parent / "db" / "schema.sql"
+SCHEMA_PATH     = Path(__file__).parent.parent / "db" / "schema.sql"
+MIGRATIONS_DIR  = Path(__file__).parent.parent / "db" / "migrations"
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
@@ -61,10 +62,11 @@ async def db_pool() -> AsyncGenerator[asyncpg.Pool, None]:
 
     pool = await asyncpg.create_pool(dsn=dsn, min_size=1, max_size=5, init=_init_conn)
 
-    # Apply schema
-    schema_sql = SCHEMA_PATH.read_text()
+    # Apply base schema then all migrations in order so the test DB matches prod
     async with pool.acquire() as conn:
-        await conn.execute(schema_sql)
+        await conn.execute(SCHEMA_PATH.read_text())
+        for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
+            await conn.execute(migration.read_text())
 
     yield pool
 
