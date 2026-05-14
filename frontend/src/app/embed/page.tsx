@@ -6,6 +6,8 @@ import AppShell from '@/components/layout/AppShell';
 import { getToken } from '@/lib/auth';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api';
+
 interface EmbedToken {
   id: number;
   name: string;
@@ -47,7 +49,7 @@ export default function EmbedPage() {
       const token = getToken();
       const body: Record<string, unknown> = { name: name.trim(), widget_type: widgetType };
       if (expireDays) body.expires_days = Number(expireDays);
-      const res = await fetch('/api/embed/tokens', {
+      const res = await fetch(`${BASE}/embed/tokens`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
