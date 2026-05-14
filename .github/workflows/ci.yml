@@ -151,7 +151,7 @@ jobs:
           # Signup
           RESPONSE=$(curl -sf -X POST http://localhost/api/auth/signup \
             -H "Content-Type: application/json" \
-            -d '{"org_name":"CI Org","email":"ci@test.com","password":"testpass123"}')
+            -d '{"org_name":"CI Org","email":"ci@test.com","password":"CiTestPass123"}')
           echo "Signup response: $RESPONSE"
           TOKEN=$(echo $RESPONSE | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 

@@ -8,6 +8,7 @@ import {
   updateConnector, Connector, SyncRun, ApiError,
 } from '@/lib/api';
 import clsx from 'clsx';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 // ── Connector type metadata ───────────────────────────────────────────────────
 
@@ -205,11 +206,12 @@ function SyncRunsPanel({ connector }: { connector: Connector }) {
 // ── Connector card ────────────────────────────────────────────────────────────
 
 function ConnectorCard({ connector, onDeleted, onUpdated }: { connector: Connector; onDeleted: () => void; onUpdated: () => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState('');
-  const [deleting, setDeleting] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  const [expanded,     setExpanded]     = useState(false);
+  const [uploading,    setUploading]    = useState(false);
+  const [uploadMsg,    setUploadMsg]    = useState('');
+  const [deleting,     setDeleting]     = useState(false);
+  const [deleteOpen,   setDeleteOpen]   = useState(false);
+  const [syncing,      setSyncing]      = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync interval editing
@@ -247,8 +249,7 @@ function ConnectorCard({ connector, onDeleted, onUpdated }: { connector: Connect
     }
   }
 
-  async function handleDelete() {
-    if (!confirm(`Delete "${connector.name}"? This will remove all sync history and cannot be undone.`)) return;
+  async function doDelete() {
     setDeleting(true);
     try {
       await deleteConnector(connector.id);
@@ -384,7 +385,7 @@ function ConnectorCard({ connector, onDeleted, onUpdated }: { connector: Connect
             {expanded ? 'Hide runs' : 'Sync runs'}
           </button>
           <button
-            onClick={handleDelete}
+            onClick={() => setDeleteOpen(true)}
             disabled={deleting}
             className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50"
             title="Delete connector"
@@ -404,6 +405,16 @@ function ConnectorCard({ connector, onDeleted, onUpdated }: { connector: Connect
       )}
 
       {expanded && <SyncRunsPanel connector={connector} />}
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title={`Delete "${connector.name}"?`}
+        description="All sync history and configuration for this connector will be permanently removed. You'll need to set it up again from scratch."
+        confirmWord="delete"
+        confirmLabel="Delete connector"
+        onConfirm={doDelete}
+        onClose={() => setDeleteOpen(false)}
+      />
     </div>
   );
 }

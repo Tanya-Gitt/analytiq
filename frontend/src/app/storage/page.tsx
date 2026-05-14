@@ -4,23 +4,24 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import AppShell from '@/components/layout/AppShell';
 import { type StorageStats, type ArchivedEvent, getStorageStats, archiveEvents, listArchivedEvents } from '@/lib/api';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 function fmt(n: number) { return n.toLocaleString(); }
 
 export default function StoragePage() {
   const { data: stats, mutate: reloadStats } = useSWR<StorageStats>('storage/stats', getStorageStats);
 
-  const [days,      setDays]      = useState(90);
-  const [archiving, setArchiving] = useState(false);
-  const [archiveMsg, setArchiveMsg] = useState<string | null>(null);
+  const [days,        setDays]        = useState(90);
+  const [archiving,   setArchiving]   = useState(false);
+  const [archiveMsg,  setArchiveMsg]  = useState<string | null>(null);
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   const [search,    setSearch]    = useState('');
   const [query,     setQuery]     = useState('');
   const [archived,  setArchived]  = useState<ArchivedEvent[] | null>(null);
   const [browsing,  setBrowsing]  = useState(false);
 
-  async function handleArchive() {
-    if (!confirm(`Archive all events older than ${days} days? They'll move to cold storage and stay queryable.`)) return;
+  async function doArchive() {
     setArchiving(true);
     setArchiveMsg(null);
     try {
@@ -107,7 +108,7 @@ export default function StoragePage() {
               <option key={d} value={d}>{d} days</option>
             ))}
           </select>
-          <button className="btn-primary" onClick={handleArchive} disabled={archiving}>
+          <button className="btn-primary" onClick={() => setArchiveOpen(true)} disabled={archiving}>
             {archiving ? 'Archiving…' : 'Run Archive'}
           </button>
         </div>
@@ -160,6 +161,15 @@ export default function StoragePage() {
         )}
       </div>
     </div>
+
+    <ConfirmDialog
+      open={archiveOpen}
+      title={`Archive events older than ${days} days?`}
+      description={`Events will move from the hot table to cold storage. They stay queryable but writes to them stop. This cannot be reversed.`}
+      confirmLabel="Run archive"
+      onConfirm={doArchive}
+      onClose={() => setArchiveOpen(false)}
+    />
     </AppShell>
   );
 }

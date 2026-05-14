@@ -12,16 +12,19 @@ import {
   gdprRemoveOptOut,
   gdprForget,
 } from '@/lib/api';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 export default function GdprPage() {
   const { data: optOuts = [], mutate: reloadOptOuts } = useSWR<GdprOptOut[]>('gdpr/opt-outs', listOptOuts);
 
-  const [lookupId,  setLookupId]  = useState('');
-  const [exportData, setExportData] = useState<GdprExport | null>(null);
-  const [optOutId,  setOptOutId]  = useState('');
-  const [forgetId,  setForgetId]  = useState('');
-  const [msg,       setMsg]       = useState<{ text: string; ok: boolean } | null>(null);
-  const [loading,   setLoading]   = useState<string | null>(null);
+  const [lookupId,     setLookupId]     = useState('');
+  const [exportData,   setExportData]   = useState<GdprExport | null>(null);
+  const [optOutId,     setOptOutId]     = useState('');
+  const [forgetId,     setForgetId]     = useState('');
+  const [msg,          setMsg]          = useState<{ text: string; ok: boolean } | null>(null);
+  const [loading,      setLoading]      = useState<string | null>(null);
+  const [forgetOpen,   setForgetOpen]   = useState(false);
+  const [reOptOutId,   setReOptOutId]   = useState<string | null>(null);
 
   function flash(text: string, ok: boolean) {
     setMsg({ text, ok });
@@ -56,7 +59,7 @@ export default function GdprPage() {
     }
   }
 
-  async function handleRemoveOptOut(userId: string) {
+  async function doRemoveOptOut(userId: string) {
     try {
       await gdprRemoveOptOut(userId);
       await reloadOptOuts();
@@ -66,9 +69,8 @@ export default function GdprPage() {
     }
   }
 
-  async function handleForget() {
+  async function doForget() {
     if (!forgetId.trim()) return;
-    if (!confirm(`Permanently delete ALL data for "${forgetId.trim()}"? This cannot be undone.`)) return;
     setLoading('forget');
     try {
       const res = await gdprForget(forgetId.trim());
@@ -181,7 +183,7 @@ export default function GdprPage() {
           />
           <button
             className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
-            onClick={handleForget}
+            onClick={() => { if (forgetId.trim()) setForgetOpen(true); }}
             disabled={loading === 'forget' || !forgetId.trim()}
           >
             {loading === 'forget' ? 'Deleting…' : 'Erase Data'}
@@ -219,7 +221,7 @@ export default function GdprPage() {
                 </div>
                 <button
                   className="text-xs text-blue-600 hover:text-blue-800"
-                  onClick={() => handleRemoveOptOut(row.user_id)}
+                  onClick={() => setReOptOutId(row.user_id)}
                 >
                   Re-enable
                 </button>
@@ -229,6 +231,27 @@ export default function GdprPage() {
         )}
       </div>
     </div>
+
+    {/* Type-to-confirm: erase all user data */}
+    <ConfirmDialog
+      open={forgetOpen}
+      title={`Permanently erase "${forgetId.trim()}"?`}
+      description="All events for this user will be deleted immediately and cannot be recovered. This fulfils a GDPR Right to Erasure request."
+      confirmWord="delete"
+      confirmLabel="Erase all data"
+      onConfirm={doForget}
+      onClose={() => setForgetOpen(false)}
+    />
+
+    {/* Simple confirm: re-enable tracking */}
+    <ConfirmDialog
+      open={!!reOptOutId}
+      title={`Re-enable tracking for "${reOptOutId ?? ''}"?`}
+      description="Future events from this user will be collected again. Only do this if the user has consented."
+      confirmLabel="Re-enable"
+      onConfirm={() => reOptOutId && doRemoveOptOut(reOptOutId)}
+      onClose={() => setReOptOutId(null)}
+    />
     </AppShell>
   );
 }

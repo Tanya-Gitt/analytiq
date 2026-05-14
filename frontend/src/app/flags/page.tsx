@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import useSWR from 'swr';
 import AppShell from '@/components/layout/AppShell';
 import {
   listFlags, createFlag, updateFlag, deleteFlag,
   type FeatureFlag,
 } from '@/lib/api';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -139,8 +141,8 @@ function FlagModal({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
         <h2 className="text-base font-bold text-gray-900 mb-4">
           {isNew ? 'Create flag' : 'Edit flag'}
@@ -225,7 +227,8 @@ function FlagModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -371,27 +374,15 @@ flags = httpx.post(
         />
       )}
 
-      {/* Delete confirm */}
-      {deleting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
-            <p className="text-base font-bold text-gray-900 mb-1">Delete flag?</p>
-            <p className="text-sm text-gray-500 mb-4">
-              <code className="font-mono text-red-600">{deleting.name}</code> will be permanently removed.
-            </p>
-            <div className="flex gap-2">
-              <button onClick={() => setDeleting(null)}
-                className="flex-1 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
-                Cancel
-              </button>
-              <button onClick={() => handleDelete(deleting)}
-                className="flex-1 py-2 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700">
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!deleting}
+        title={`Delete flag "${deleting?.name ?? ''}"?`}
+        description="This feature flag will be permanently removed. Any code checking this flag will receive the default (off) state."
+        confirmWord="delete"
+        confirmLabel="Delete flag"
+        onConfirm={() => deleting && handleDelete(deleting)}
+        onClose={() => setDeleting(null)}
+      />
     </AppShell>
   );
 }

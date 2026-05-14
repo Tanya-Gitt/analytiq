@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { createAnnotation, deleteAnnotation, type Annotation } from '@/lib/api';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 const PRESET_COLORS = [
   '#6366f1', // indigo (default)
@@ -21,11 +22,12 @@ interface Props {
 }
 
 export default function AnnotationsPanel({ segment, annotations, onAdd, onDelete }: Props) {
-  const [open, setOpen]     = useState(false);
-  const [date, setDate]     = useState('');
-  const [label, setLabel]   = useState('');
-  const [color, setColor]   = useState('#6366f1');
-  const [saving, setSaving] = useState(false);
+  const [open,         setOpen]         = useState(false);
+  const [date,         setDate]         = useState('');
+  const [label,        setLabel]        = useState('');
+  const [color,        setColor]        = useState('#6366f1');
+  const [saving,       setSaving]       = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Annotation | null>(null);
 
   async function handleAdd() {
     if (!date || !label.trim()) return;
@@ -43,7 +45,7 @@ export default function AnnotationsPanel({ segment, annotations, onAdd, onDelete
     }
   }
 
-  async function handleDelete(id: string) {
+  async function doDelete(id: string) {
     await deleteAnnotation(id);
     onDelete(id);
   }
@@ -130,7 +132,7 @@ export default function AnnotationsPanel({ segment, annotations, onAdd, onDelete
                     <span className="text-xs text-gray-500 font-mono">{ann.date}</span>
                     <span className="text-xs text-gray-700 flex-1 truncate">{ann.label}</span>
                     <button
-                      onClick={() => handleDelete(ann.id)}
+                      onClick={() => setDeleteTarget(ann)}
                       className="text-xs text-red-400 hover:text-red-600"
                       title="Remove"
                     >
@@ -143,6 +145,15 @@ export default function AnnotationsPanel({ segment, annotations, onAdd, onDelete
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Remove annotation?"
+        description={deleteTarget ? `"${deleteTarget.label}" on ${deleteTarget.date} will be removed from the chart.` : ''}
+        confirmLabel="Remove"
+        onConfirm={() => deleteTarget && doDelete(deleteTarget.id)}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

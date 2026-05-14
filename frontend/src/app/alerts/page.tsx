@@ -7,6 +7,7 @@ import {
   listAlertRules, createAlertRule, deleteAlertRule,
   AlertRule, ApiError,
 } from '@/lib/api';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 // ── Available metrics ─────────────────────────────────────────────────────────
 
@@ -160,10 +161,10 @@ function AlertRuleRow({
   rule: AlertRule;
   onDeleted: () => void;
 }) {
-  const [deleting, setDeleting] = useState(false);
+  const [deleting,     setDeleting]     = useState(false);
+  const [confirmOpen,  setConfirmOpen]  = useState(false);
 
-  async function handleDelete() {
-    if (!confirm(`Delete rule "${rule.name}"?`)) return;
+  async function doDelete() {
     setDeleting(true);
     try {
       await deleteAlertRule(rule.id);
@@ -179,34 +180,45 @@ function AlertRuleRow({
       : `${rule.condition} ${rule.threshold}`;
 
   return (
-    <div className="card flex items-start justify-between gap-4">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-sm text-gray-900">{rule.name}</span>
-          <span className={rule.state === 'OK' ? 'badge-ok' : 'badge-triggered'}>
-            {rule.state}
-          </span>
-        </div>
-        <p className="text-xs text-gray-500 mt-0.5">
-          <span className="font-mono">{rule.metric}</span>
-          {' '}{conditionStr}
-          {' '}over last {rule.window_hours}h
-          {' '}→ {rule.channel}: {rule.destination}
-        </p>
-        {rule.last_triggered_at && (
-          <p className="text-xs text-gray-400 mt-0.5">
-            Last triggered: {new Date(rule.last_triggered_at).toLocaleString()}
+    <>
+      <div className="card flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-sm text-gray-900">{rule.name}</span>
+            <span className={rule.state === 'OK' ? 'badge-ok' : 'badge-triggered'}>
+              {rule.state}
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5">
+            <span className="font-mono">{rule.metric}</span>
+            {' '}{conditionStr}
+            {' '}over last {rule.window_hours}h
+            {' '}→ {rule.channel}: {rule.destination}
           </p>
-        )}
+          {rule.last_triggered_at && (
+            <p className="text-xs text-gray-400 mt-0.5">
+              Last triggered: {new Date(rule.last_triggered_at).toLocaleString()}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={() => setConfirmOpen(true)}
+          disabled={deleting}
+          className="text-xs text-red-500 hover:text-red-700 flex-shrink-0 disabled:opacity-50"
+        >
+          {deleting ? 'Deleting…' : 'Delete'}
+        </button>
       </div>
-      <button
-        onClick={handleDelete}
-        disabled={deleting}
-        className="text-xs text-red-500 hover:text-red-700 flex-shrink-0 disabled:opacity-50"
-      >
-        {deleting ? 'Deleting…' : 'Delete'}
-      </button>
-    </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title={`Delete rule "${rule.name}"?`}
+        description="This alert rule will be permanently removed and you will stop receiving notifications."
+        confirmLabel="Delete"
+        onConfirm={doDelete}
+        onClose={() => setConfirmOpen(false)}
+      />
+    </>
   );
 }
 

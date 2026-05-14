@@ -25,7 +25,7 @@ class TestSignup:
             json={
                 "org_name": "Test Corp",
                 "email": "newuser@example.com",
-                "password": "s3cr3tpassword",
+                "password": "S3cr3tPassword1",
             },
         )
         assert resp.status_code == 201
@@ -43,7 +43,7 @@ class TestSignup:
             json={
                 "org_name": "JWT Corp",
                 "email": "jwtuser@example.com",
-                "password": "password123",
+                "password": "TestPassword123",
             },
         )
         assert signup.status_code == 201
@@ -61,7 +61,7 @@ class TestSignup:
         payload = {
             "org_name": "Dupe Corp",
             "email": "dupe@example.com",
-            "password": "password",
+            "password": "TestPassword123",
         }
         first = await client.post("/api/auth/signup", json=payload)
         assert first.status_code == 201
@@ -78,7 +78,7 @@ class TestSignup:
             json={
                 "org_name": "Bad Email Corp",
                 "email": "not-an-email",
-                "password": "password",
+                "password": "TestPassword123",
             },
         )
         assert resp.status_code == 422
@@ -91,7 +91,7 @@ class TestSignup:
             json={
                 "org_name": "Acme Inc",
                 "email": "acme@example.com",
-                "password": "password",
+                "password": "TestPassword123",
             },
         )
         assert signup.status_code == 201
@@ -111,13 +111,13 @@ class TestLogin:
             json={
                 "org_name": "Login Corp",
                 "email": "loginuser@example.com",
-                "password": "correct_password",
+                "password": "CorrectPassword123",
             },
         )
 
         resp = await client.post(
             "/api/auth/login",
-            json={"email": "loginuser@example.com", "password": "correct_password"},
+            json={"email": "loginuser@example.com", "password": "CorrectPassword123"},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -131,7 +131,7 @@ class TestLogin:
             json={
                 "org_name": "Wrong Pass Corp",
                 "email": "wrongpass@example.com",
-                "password": "correct",
+                "password": "CorrectPassword123",
             },
         )
 
@@ -158,12 +158,12 @@ class TestLogin:
             json={
                 "org_name": "Me Corp",
                 "email": "meuser@example.com",
-                "password": "pass1234",
+                "password": "TestPassword123",
             },
         )
         login = await client.post(
             "/api/auth/login",
-            json={"email": "meuser@example.com", "password": "pass1234"},
+            json={"email": "meuser@example.com", "password": "TestPassword123"},
         )
         assert login.status_code == 200
         token = login.json()["access_token"]
@@ -180,7 +180,7 @@ class TestLogin:
             json={
                 "org_name": "Same Org",
                 "email": "sameorg@example.com",
-                "password": "password123",
+                "password": "TestPassword123",
             },
         )
         assert signup.status_code == 201, signup.text
@@ -188,7 +188,7 @@ class TestLogin:
 
         login = await client.post(
             "/api/auth/login",
-            json={"email": "sameorg@example.com", "password": "password123"},
+            json={"email": "sameorg@example.com", "password": "TestPassword123"},
         )
         assert login.json()["org_id"] == signup_org_id
 
@@ -214,7 +214,7 @@ class TestMe:
             json={
                 "org_name": "Fields Corp",
                 "email": "fields@example.com",
-                "password": "password",
+                "password": "TestPassword123",
             },
         )
         token = signup.json()["access_token"]
@@ -236,7 +236,7 @@ class TestMe:
             json={
                 "org_name": "Key Match Corp",
                 "email": "keymatch@example.com",
-                "password": "password",
+                "password": "TestPassword123",
             },
         )
         signup_data = signup.json()
