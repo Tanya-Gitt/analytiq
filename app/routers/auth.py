@@ -398,22 +398,18 @@ async def demo_login(pool: asyncpg.Pool = Depends(get_pool)):
     Returns 503 if the demo org hasn't been seeded yet
     (run: python scripts/seed_demo.py).
     """
-    try:
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                SELECT u.id AS user_id, u.org_id, u.role
-                FROM   users u
-                JOIN   orgs  o ON o.id = u.org_id
-                WHERE  o.name = $1
-                ORDER  BY u.created_at
-                LIMIT  1
-                """,
-                _DEMO_ORG_NAME,
-            )
-    except Exception as exc:
-        logger.exception("demo-login DB query failed")
-        raise HTTPException(status_code=500, detail=f"DB error: {exc}") from exc
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT u.id AS user_id, u.org_id, u.role, o.api_key
+            FROM   users u
+            JOIN   orgs  o ON o.id = u.org_id
+            WHERE  o.name = $1
+            ORDER  BY u.created_at
+            LIMIT  1
+            """,
+            _DEMO_ORG_NAME,
+        )
 
     if row is None:
         raise HTTPException(
@@ -421,13 +417,14 @@ async def demo_login(pool: asyncpg.Pool = Depends(get_pool)):
             detail="Demo data not seeded yet. Run: python scripts/seed_demo.py",
         )
 
-    try:
-        token = create_access_token(
-            user_id=str(row["user_id"]),
-            org_id=str(row["org_id"]),
-            role=row["role"],
-        )
-    except Exception as exc:
-        logger.exception("demo-login token creation failed")
-        raise HTTPException(status_code=500, detail=f"Token error: {exc}") from exc
-    return TokenResponse(access_token=token, token_type="bearer")
+    token = create_access_token(
+        user_id=str(row["user_id"]),
+        org_id=str(row["org_id"]),
+        role=row["role"],
+    )
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
+        org_id=str(row["org_id"]),
+        api_key=row["api_key"],
+    )
