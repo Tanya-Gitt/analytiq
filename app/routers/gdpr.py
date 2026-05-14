@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.audit_log import log_action
-from app.deps import get_current_user, get_org_db, require_admin
+from app.deps import get_org_db, require_admin
 
 router = APIRouter()
 
@@ -117,7 +117,10 @@ async def forget_user(
 # ── Opt-outs ──────────────────────────────────────────────────────────────────
 
 @router.get("/gdpr/opt-outs")
-async def list_opt_outs(db: asyncpg.Connection = Depends(get_org_db)):
+async def list_opt_outs(
+    db:           asyncpg.Connection = Depends(get_org_db),
+    current_user: dict = Depends(require_admin),   # admin-only: contains PII (user IDs)
+):
     rows = await db.fetch(
         "SELECT user_id, opted_out_at FROM gdpr_opt_outs ORDER BY opted_out_at DESC"
     )

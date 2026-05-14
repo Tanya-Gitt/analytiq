@@ -62,8 +62,21 @@ async def db_pool() -> AsyncGenerator[asyncpg.Pool, None]:
 
     pool = await asyncpg.create_pool(dsn=dsn, min_size=1, max_size=5, init=_init_conn)
 
-    # Apply base schema then all migrations in order so the test DB matches prod
+    # Apply base schema then all migrations in order so the test DB matches prod.
+    # Migrations grant to app_role/app_user which are created by 02_app_user.sh
+    # in Docker but don't exist in the CI test container — create them first.
     async with pool.acquire() as conn:
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_role') THEN
+                    CREATE ROLE app_role;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
+                    CREATE ROLE app_user;
+                END IF;
+            END $$;
+        """)
         await conn.execute(SCHEMA_PATH.read_text())
         for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
             await conn.execute(migration.read_text())
