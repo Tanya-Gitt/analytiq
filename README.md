@@ -263,38 +263,33 @@ Analytiq was built with the assumption that it handles sensitive product data. S
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Docker Compose Stack                          │
-│                                                                       │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  nginx :80                                                     │   │
-│  │  /api/*  →  FastAPI :8000      /*  →  Next.js :3000           │   │
-│  │  /sdk/*  →  FastAPI :8000      /auth/*  →  GoTrue :9999       │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│            │                                │                         │
-│     ┌──────▼──────┐                 ┌───────▼──────┐                │
-│     │  FastAPI    │                 │   Next.js    │                 │
-│     │  :8000      │                 │   :3000      │                 │
-│     │  REST API   │                 │   Dashboard  │                 │
-│     │  RLS auth   │                 │   UI         │                 │
-│     │  Rate limit │                 │   Recharts   │                 │
-│     └──────┬──────┘                 └──────────────┘                │
-│            │                                                          │
-│     ┌──────▼──────────────────────────────────────────────────┐     │
-│     │  PostgreSQL :5432  (Row-Level Security, 30+ tables)      │     │
-│     │  orgs · users · events · orders · connectors             │     │
-│     │  alert_rules · sync_runs · share_tokens · annotations    │     │
-│     │  org_invites · funnels · feature_flags · api_keys        │     │
-│     │  audit_log · gdpr_opt_outs · churn_scores · anomalies    │     │
-│     │  embed_tokens · sso_configs · scheduled_reports          │     │
-│     └─────────────────────────────────────────────────────────┘     │
-│            │                                                          │
-│     ┌──────▼──────┐                                                  │
-│     │ APScheduler │  connector polling (60s) · alert eval (60s)      │
-│     │ :scheduler  │  anomaly detection · orphan recovery (5m)        │
-│     └─────────────┘                                                  │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    Client(["🌐 Browser / SDK Client"])
+
+    subgraph Stack ["🐳 Docker Compose Stack"]
+        direction TB
+
+        nginx["<b>nginx</b> :80<br/>/api/* → FastAPI<br/>/sdk/* → FastAPI<br/>/auth/* → GoTrue<br/>/* → Next.js"]
+
+        subgraph Services ["Application Services"]
+            direction LR
+            api["<b>FastAPI</b> :8000<br/>REST + WebSocket<br/>RLS enforcement<br/>Rate limiting"]
+            frontend["<b>Next.js</b> :3000<br/>Dashboard UI<br/>Recharts · SSR"]
+            auth["<b>GoTrue</b> :9999<br/>JWT issuer<br/>SSO / OAuth"]
+            scheduler["<b>APScheduler</b><br/>Connector polling 60s<br/>Alert eval 60s<br/>Anomaly detection"]
+        end
+
+        db[("<b>PostgreSQL</b> :5432<br/>Row-Level Security<br/>30+ tables · per-org isolation<br/>events · orders · connectors<br/>alerts · funnels · flags<br/>audit_log · gdpr_opt_outs<br/>api_keys · embed_tokens")]
+    end
+
+    Client -->|HTTPS| nginx
+    nginx --> api
+    nginx --> frontend
+    nginx --> auth
+    api -->|asyncpg pool| db
+    scheduler -->|asyncpg pool| db
+    auth -->|users table| db
 ```
 
 **Six containers:** `postgres` · `app` (FastAPI) · `frontend` (Next.js) · `scheduler` · `auth` (GoTrue) · `nginx`
