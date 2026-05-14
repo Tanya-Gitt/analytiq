@@ -276,3 +276,87 @@ async def reseed_orders(secret: str = "", pool: asyncpg.Pool = Depends(get_pool)
                 total_o += len(or_batch)
 
     return {"status": "reseeded", "org_id": oid, "orders": total_o}
+
+
+@router.post("/internal/reseed-misc", status_code=202)
+async def reseed_misc(secret: str = "", pool: asyncpg.Pool = Depends(get_pool)):
+    """Re-insert all misc demo data: flags, alerts, funnels, connectors, reports, annotations, anomalies."""
+    if not _SECRET or secret != _SECRET:
+        raise HTTPException(403, "invalid or missing secret")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id FROM orgs WHERE name = $1", DEMO_ORG_NAME
+        )
+    if not row:
+        raise HTTPException(404, "Demo org not found — run /internal/seed first")
+
+    oid = str(row["id"])
+
+    # Get demo user id
+    async with pool.acquire() as conn:
+        uid = str(await conn.fetchval(
+            "SELECT id FROM users WHERE org_id = $1::uuid LIMIT 1", oid
+        ))
+
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(f"SET LOCAL app.org_id = '{oid}'")
+            await conn.execute("SET LOCAL ROLE app_role")
+
+            # Wipe existing misc data for demo org
+            await conn.execute("DELETE FROM connectors WHERE org_id = $1::uuid", oid)
+            await conn.execute("DELETE FROM alert_rules WHERE org_id = $1::uuid", oid)
+            await conn.execute("DELETE FROM funnels WHERE org_id = $1::uuid", oid)
+            await conn.execute("DELETE FROM feature_flags WHERE org_id = $1::uuid", oid)
+            await conn.execute("DELETE FROM annotations WHERE org_id = $1::uuid", oid)
+            await conn.execute("DELETE FROM anomaly_events WHERE org_id = $1::uuid", oid)
+            await conn.execute("DELETE FROM scheduled_reports WHERE org_id = $1::uuid", oid)
+
+            # Re-insert
+            await conn.executemany(
+                "INSERT INTO connectors (org_id,type,name,config,status,last_synced_at) VALUES ($1::uuid,$2,$3,$4,$5,$6)",
+                [(oid,"stripe","Stripe Production",json.dumps({"mode":"live"}),"active",NOW-timedelta(days=1)),
+                 (oid,"csv","Monthly Cohort CSV",json.dumps({"schedule":"weekly"}),"active",NOW-timedelta(days=3)),
+                 (oid,"webhook","Zapier Webhook",json.dumps({"events":["purchase","signup"]}),"paused",NOW-timedelta(days=14))])
+
+            await conn.executemany(
+                "INSERT INTO alert_rules (org_id,name,metric,operator,threshold,period_minutes,channels,enabled) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8)",
+                [(oid,"DAU drops below 30","dau","lt",30,1440,json.dumps(["email"]),True),
+                 (oid,"Daily revenue below $200","revenue_total","lt",200,1440,json.dumps(["email","slack"]),True),
+                 (oid,"Error rate above 5%","error_rate","gt",5,60,json.dumps(["slack"]),True)])
+
+            await conn.executemany(
+                "INSERT INTO funnels (org_id,name,steps) VALUES ($1::uuid,$2,$3)",
+                [(oid,"Signup to Paid",json.dumps(["page_view","signup","onboarding_complete","purchase"])),
+                 (oid,"Feature Adoption",json.dumps(["signup","feature_used","feature_used","purchase"]))])
+
+            await conn.executemany(
+                "INSERT INTO feature_flags (org_id,name,description,enabled,rollout_pct,targeting) VALUES ($1::uuid,$2,$3,$4,$5,$6)",
+                [(oid,"ai_copilot_beta","AI Copilot (beta)",True,25,json.dumps([])),
+                 (oid,"new_dashboard_v2","Redesigned dashboard",True,75,json.dumps([])),
+                 (oid,"dark_mode","Dark mode UI",True,50,json.dumps([])),
+                 (oid,"bulk_export","Bulk data export",True,10,json.dumps([])),
+                 (oid,"pdf_reports","PDF report attachments",True,100,json.dumps([]))])
+
+            await conn.executemany(
+                "INSERT INTO annotations (org_id,segment,date,label,color) VALUES ($1::uuid,$2,$3,$4,$5)",
+                [(oid,"A",(NOW-timedelta(days=300)).date(),"Beta launch 🚀","#10b981"),
+                 (oid,"A",(NOW-timedelta(days=210)).date(),"Product Hunt #1 🏆","#f59e0b"),
+                 (oid,"B",(NOW-timedelta(days=160)).date(),"TechCrunch coverage 📰","#6366f1"),
+                 (oid,"A",(NOW-timedelta(days=90)).date(),"Pricing update 💰","#ef4444"),
+                 (oid,"A",(NOW-timedelta(days=30)).date(),"v2.0 Release 🎉","#3b82f6"),
+                 (oid,"B",(NOW-timedelta(days=7)).date(),"Enterprise partnership 🤝","#8b5cf6")])
+
+            await conn.executemany(
+                "INSERT INTO anomaly_events (org_id,metric,value,baseline,std_dev,z_score,direction,severity,detected_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9)",
+                [(oid,"events_count",4200,600,80,45.0,"high","critical",NOW-timedelta(days=210)),
+                 (oid,"revenue_total",85,1800,220,-7.8,"low","critical",NOW-timedelta(days=45)),
+                 (oid,"events_count",5800,900,110,44.5,"high","critical",NOW-timedelta(days=30))])
+
+            await conn.executemany(
+                "INSERT INTO scheduled_reports (org_id,name,metric,period,recipients,enabled,created_by,last_run_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7::uuid,$8)",
+                [(oid,"Weekly DAU Summary","dau","weekly",[DEMO_EMAIL],True,uid,NOW-timedelta(days=7)),
+                 (oid,"Monthly Revenue Report","revenue_total","monthly",[DEMO_EMAIL],True,uid,NOW-timedelta(days=30))])
+
+    return {"status": "reseeded_misc", "org_id": oid}
