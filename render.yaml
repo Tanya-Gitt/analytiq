@@ -1,0 +1,52 @@
+# Render.com deployment configuration
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Two services:
+#   analytiq-api      — FastAPI REST + WebSocket (web service, free tier)
+#   analytiq-worker   — APScheduler background jobs (background worker, free tier)
+#
+# Database: use Neon.tech (https://neon.tech) — free PostgreSQL, no credit card.
+#   1. Create a Neon project → copy the connection string
+#   2. Paste it as DATABASE_URL in each service's environment vars on Render
+#
+# Frontend: deploy the frontend/ directory to Vercel (https://vercel.com) — free.
+#   Set NEXT_PUBLIC_API_URL=https://analytiq-api.onrender.com in Vercel env vars.
+
+services:
+
+  # ── FastAPI web service ──────────────────────────────────────────────────────
+  - type: web
+    name: analytiq-api
+    runtime: python
+    region: oregon          # closest to Asia: oregon or singapore
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scripts/migrate.py && uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false         # paste your Neon connection string in the Render dashboard
+      - key: JWT_SECRET
+        generateValue: true # Render auto-generates a strong secret
+      - key: ALLOWED_ORIGINS
+        value: https://your-frontend.vercel.app  # update after deploying to Vercel
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PYTHONDONTWRITEBYTECODE
+        value: "1"
+
+  # ── APScheduler background worker ───────────────────────────────────────────
+  - type: worker
+    name: analytiq-worker
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scheduler/main.py
+    envVars:
+      - key: DATABASE_URL
+        sync: false         # same Neon connection string as above
+      - key: JWT_SECRET
+        sync: false         # same JWT_SECRET as above
+      - key: PYTHONUNBUFFERED
+        value: "1"
