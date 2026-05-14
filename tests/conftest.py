@@ -26,9 +26,11 @@ import json
 import os
 from pathlib import Path
 from typing import AsyncGenerator
+from unittest.mock import AsyncMock, patch
 
 import asyncpg
 import bcrypt
+import pytest
 import pytest_asyncio
 from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
@@ -36,6 +38,23 @@ from httpx import ASGITransport, AsyncClient
 # Load .env so JWT_SECRET and other env vars are available during tests.
 # override=False means pre-set environment variables (e.g. from CI) take priority.
 load_dotenv(Path(__file__).parent.parent / ".env", override=False)
+
+# ── HIBP mock ────────────────────────────────────────────────────────────────
+# The HaveIBeenPwned check makes a live HTTP request during signup.
+# In CI this request actually succeeds and correctly flags common test
+# passwords (TestPassword123, CorrectPassword123, etc.) as breached —
+# causing all signup tests to fail with 400.
+# We patch _check_pwned to always return False (not pwned) for every test.
+
+@pytest.fixture(autouse=True)
+def mock_hibp_check():
+    """Patch _check_pwned → False so HIBP network calls never block tests."""
+    with patch(
+        "app.routers.auth._check_pwned",
+        new=AsyncMock(return_value=False),
+    ):
+        yield
+
 
 # ── Database fixtures ─────────────────────────────────────────────────────────
 
