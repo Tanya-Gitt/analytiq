@@ -48,6 +48,19 @@ PLANS    = ["starter", "pro", "enterprise"]
 PLAN_PRICES = {"starter": 29.0, "pro": 79.0, "enterprise": 299.0}
 PLAN_ANNUAL = {"starter": 290.0, "pro": 790.0, "enterprise": 2990.0}
 
+PRODUCTS = [
+    ("Analytics Pro",   "P001", 49.0,  35.0),
+    ("Data Connector",  "P002", 29.0,  18.0),
+    ("Dashboard Plus",  "P003", 79.0,  55.0),
+    ("AI Copilot Add-on","P004",39.0,  25.0),
+    ("Export Bundle",   "P005", 19.0,  10.0),
+    ("Enterprise Suite","P006",299.0, 190.0),
+    ("Team Seats x5",   "P007", 99.0,  60.0),
+    ("API Access",      "P008", 59.0,  38.0),
+]
+CHANNELS = ["organic", "paid_search", "social", "referral", "email", "direct"]
+ACQ_SOURCES = ["google", "linkedin", "twitter", "friend", "blog", "conference"]
+
 _ENAMES  = ["page_view","button_click","identify","search","feature_used","purchase","signup","error","video_play","onboarding_complete"]
 _EWEIGHTS= [38, 20, 6, 8, 12, 3, 3, 2, 4, 4]
 
@@ -83,10 +96,30 @@ def _evt(org_id: str, day: int) -> tuple:
 
 
 def _order(org_id: str, day: int) -> tuple:
-    dt  = START + timedelta(days=day, seconds=rng.randint(0,86399))
-    pl  = rng.choices(PLANS, weights=[50,35,15], k=1)[0]
-    ann = rng.random() < 0.30
-    return (org_id, rng.choice(ALL_ACTIVE), json.dumps({"plan":pl,"amount":PLAN_ANNUAL[pl] if ann else PLAN_PRICES[pl],"billing":"annual" if ann else "monthly","country":rng.choice(COUNTRIES)}), dt)
+    dt          = START + timedelta(days=day)
+    order_date  = dt.date()
+    product     = rng.choice(PRODUCTS)
+    p_name, p_id, price, cost = product
+    qty         = rng.choices([1, 2, 3, 5], weights=[60, 25, 10, 5], k=1)[0]
+    delivered   = rng.random() < 0.93
+    del_minutes = rng.randint(1200, 14400) if delivered else None
+    return (
+        org_id,                            # $1  org_id
+        f"ORD-{day:04d}-{rng.randint(1000,9999)}",  # $2  order_id
+        order_date,                        # $3  order_date
+        rng.choice(ALL_ACTIVE),            # $4  customer_id
+        p_id,                              # $5  product_id
+        p_name,                            # $6  product_name
+        rng.choice(CHANNELS),              # $7  channel
+        qty,                               # $8  quantity
+        float(price),                      # $9  price_per_unit
+        float(cost),                       # $10 cost_per_unit
+        delivered,                         # $11 delivered
+        del_minutes,                       # $12 delivery_time_minutes
+        rng.choice(COUNTRIES),             # $13 region
+        rng.random() < 0.20,               # $14 promo_used
+        rng.choice(ACQ_SOURCES),           # $15 acquisition_source
+    )
 
 
 @router.post("/internal/seed", status_code=202)
@@ -131,7 +164,14 @@ async def seed_demo(secret: str = "", pool: asyncpg.Pool = Depends(get_pool)):
 
     # Orders
     or_batch, total_o = [], 0
-    INS_O = "INSERT INTO orders (org_id,user_id,properties,created_at) VALUES ($1::uuid,$2,$3,$4)"
+    INS_O = """
+        INSERT INTO orders
+          (org_id,order_id,order_date,customer_id,product_id,product_name,
+           channel,quantity,price_per_unit,cost_per_unit,delivered,
+           delivery_time_minutes,region,promo_used,acquisition_source)
+        VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+        ON CONFLICT (org_id, order_id) DO NOTHING
+    """
     async with pool.acquire() as conn:
         async with conn.transaction():
             await _ctx(conn)
@@ -191,3 +231,48 @@ async def seed_demo(secret: str = "", pool: asyncpg.Pool = Depends(get_pool)):
                  (oid,"Monthly Revenue Report","revenue_total","monthly",[DEMO_EMAIL],True,uid,NOW-timedelta(days=30))])
 
     return {"status": "seeded", "org_id": oid, "events": total_e, "orders": total_o}
+
+
+@router.post("/internal/reseed-orders", status_code=202)
+async def reseed_orders(secret: str = "", pool: asyncpg.Pool = Depends(get_pool)):
+    """Delete and re-seed orders for the demo org with the correct schema."""
+    if not _SECRET or secret != _SECRET:
+        raise HTTPException(403, "invalid or missing secret")
+
+    async with pool.acquire() as conn:
+        oid_val = await conn.fetchval("SELECT id FROM orgs WHERE name = $1", DEMO_ORG_NAME)
+    if not oid_val:
+        raise HTTPException(404, "Demo org not found — run /internal/seed first")
+
+    oid = str(oid_val)
+
+    # Wipe existing orders for demo org
+    async with pool.acquire() as conn:
+        await conn.execute("DELETE FROM orders WHERE org_id = $1::uuid", oid)
+
+    INS_O = """
+        INSERT INTO orders
+          (org_id,order_id,order_date,customer_id,product_id,product_name,
+           channel,quantity,price_per_unit,cost_per_unit,delivered,
+           delivery_time_minutes,region,promo_used,acquisition_source)
+        VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+        ON CONFLICT (org_id, order_id) DO NOTHING
+    """
+
+    or_batch, total_o = [], 0
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(f"SET LOCAL app.org_id = '{oid}'")
+            for day in range(365):
+                n = max(1, int((3 + 22 * (day / 364)) * rng.uniform(0.7, 1.3)))
+                for _ in range(n):
+                    or_batch.append(_order(oid, day))
+                    if len(or_batch) >= 500:
+                        await conn.executemany(INS_O, or_batch)
+                        total_o += len(or_batch)
+                        or_batch.clear()
+            if or_batch:
+                await conn.executemany(INS_O, or_batch)
+                total_o += len(or_batch)
+
+    return {"status": "reseeded", "org_id": oid, "orders": total_o}
