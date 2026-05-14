@@ -24,7 +24,10 @@ async function request<T>(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    const msg = body?.detail ?? `HTTP ${res.status}`;
+    const detail = body?.detail;
+    const msg = Array.isArray(detail)
+      ? detail.map((d: { msg?: string }) => d.msg ?? JSON.stringify(d)).join('; ')
+      : (detail ?? `HTTP ${res.status}`);
     // Auto-redirect to login on 401 (expired/invalid token)
     // This prevents the "invalid or expired token" error from showing on the dashboard.
     if (res.status === 401 && typeof window !== 'undefined') {
@@ -930,5 +933,186 @@ export async function downloadWarehouseExport(
   a.download = `${dataset}.${opts.fmt ?? 'json'}`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ── Path Analysis ─────────────────────────────────────────────────────────────
+
+export interface PathStep {
+  step: number;
+  event_name: string;
+  users: number;
+  pct_of_prev: number;
+}
+
+export interface PathRow {
+  steps: string[];
+  users: number;
+}
+
+export function getPathEvents() {
+  return request<string[]>('/paths/events');
+}
+
+export function getPaths(params: { start_event: string; steps?: number }) {
+  const p = new URLSearchParams({ start_event: params.start_event });
+  if (params.steps) p.set('steps', String(params.steps));
+  return request<{ paths: PathRow[]; summary: PathStep[] }>(`/paths?${p}`);
+}
+
+// ── Schema Registry ──────────────────────────────────────────────────────────
+
+export interface EventSchema {
+  id: number;
+  event_name: string;
+  schema: Record<string, { type: string; required?: boolean }>;
+  strict_mode: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SchemaViolation {
+  id: number;
+  event_name: string;
+  violation_type: string;
+  payload: Record<string, unknown>;
+  occurred_at: string;
+}
+
+export interface PiiSummaryRow {
+  event_name: string;
+  fields_redacted: string[];
+  sample_count: number;
+  last_seen_at: string;
+}
+
+export function listSchemas() {
+  return request<EventSchema[]>('/schema');
+}
+
+export function upsertSchema(payload: { event_name: string; schema: Record<string, unknown>; strict_mode?: boolean }) {
+  return request<EventSchema>('/schema', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function deleteSchema(eventName: string) {
+  return request<{ deleted: boolean }>(`/schema/${encodeURIComponent(eventName)}`, { method: 'DELETE' });
+}
+
+export function listSchemaViolations() {
+  return request<SchemaViolation[]>('/schema/violations');
+}
+
+export function getPiiSummary() {
+  return request<PiiSummaryRow[]>('/schema/pii-summary');
+}
+
+export function inferSchema(eventName: string) {
+  return request<{ event_name: string; inferred: Record<string, unknown> }>(`/schema/infer/${encodeURIComponent(eventName)}`);
+}
+
+// ── API Keys ──────────────────────────────────────────────────────────────────
+
+export interface ApiKey {
+  id: number;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export function listApiKeys() {
+  return request<ApiKey[]>('/api-keys');
+}
+
+export function createApiKey(payload: { name: string; scopes: string[] }) {
+  return request<ApiKey & { key: string }>('/api-keys', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function revokeApiKey(id: number) {
+  return request<{ revoked: boolean }>(`/api-keys/${id}`, { method: 'DELETE' });
+}
+
+// ── Scheduled Reports ─────────────────────────────────────────────────────────
+
+export interface ScheduledReport {
+  id: number;
+  name: string;
+  metric: string;
+  period: string;
+  recipients: string[];
+  cron: string;
+  enabled: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+}
+
+export function listReports() {
+  return request<ScheduledReport[]>('/reports');
+}
+
+export function createReport(payload: { name: string; metric: string; period: string; recipients: string[]; cron: string }) {
+  return request<ScheduledReport>('/reports', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function updateReport(id: number, patch: Partial<Pick<ScheduledReport, 'enabled'>>) {
+  return request<ScheduledReport>(`/reports/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+}
+
+export function deleteReport(id: number) {
+  return request<{ deleted: boolean }>(`/reports/${id}`, { method: 'DELETE' });
+}
+
+export function runReport(id: number) {
+  return request<{ result: unknown; sent_to: string[] }>(`/reports/${id}/run`, { method: 'POST' });
+}
+
+// ── System Health ─────────────────────────────────────────────────────────────
+
+export interface SystemHealth {
+  status: string;
+  db_latency_ms: number;
+  ingest_lag_s: number | null;
+  events_24h: number;
+  checked_at: string;
+}
+
+export interface SystemStats {
+  total_all_time: number;
+  last_hour: number;
+  last_day: number;
+  last_week: number;
+  top_events_24h: { event_name: string; count: number }[];
+}
+
+export function getSystemHealth() {
+  return request<SystemHealth>('/system/health');
+}
+
+export function getSystemStats() {
+  return request<SystemStats>('/system/stats');
+}
+
+// ── Embed Tokens ──────────────────────────────────────────────────────────────
+
+export interface EmbedToken {
+  id: number;
+  name: string;
+  widget_type: string;
+  config: Record<string, unknown>;
+  expires_at: string | null;
+  created_at: string;
+  token_prefix: string;
+}
+
+export function listEmbedTokens() {
+  return request<EmbedToken[]>('/embed/tokens');
+}
+
+export function createEmbedToken(payload: { name: string; widget_type: string; config?: Record<string, unknown>; expires_days?: number }) {
+  return request<EmbedToken & { token: string }>('/embed/tokens', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function revokeEmbedToken(id: number) {
+  return request<{ revoked: boolean }>(`/embed/tokens/${id}`, { method: 'DELETE' });
 }
 

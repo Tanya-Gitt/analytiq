@@ -79,7 +79,7 @@ export default function SignupPage() {
               id="password"
               type="password"
               className="input"
-              placeholder="Min 8 characters"
+              placeholder="Min 12 chars, upper, lower, digit"
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
