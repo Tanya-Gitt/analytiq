@@ -25,5 +25,6 @@ GRANT USAGE, SELECT ON SEQUENCE heatmap_events_id_seq TO app_user;
 ALTER TABLE heatmap_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE heatmap_events FORCE  ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS heatmap_events_org ON heatmap_events;
 CREATE POLICY heatmap_events_org ON heatmap_events
   USING (org_id::text = current_setting('app.org_id', true));

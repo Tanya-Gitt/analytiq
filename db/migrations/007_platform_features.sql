@@ -19,6 +19,7 @@ CREATE INDEX IF NOT EXISTS gdpr_opt_outs_user ON gdpr_opt_outs(user_id);
 ALTER TABLE gdpr_opt_outs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gdpr_opt_outs FORCE  ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS gdpr_opt_outs_org ON gdpr_opt_outs;
 CREATE POLICY gdpr_opt_outs_org ON gdpr_opt_outs
     USING (org_id = current_setting('app.org_id', true)::uuid);
 
@@ -40,6 +41,7 @@ CREATE INDEX IF NOT EXISTS audit_log_action  ON audit_log(action);
 ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_log FORCE  ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS audit_log_org ON audit_log;
 CREATE POLICY audit_log_org ON audit_log
     USING (org_id = current_setting('app.org_id', true)::uuid);
 
@@ -64,6 +66,7 @@ CREATE INDEX IF NOT EXISTS api_keys_prefix  ON api_keys(key_prefix);
 ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE api_keys FORCE  ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS api_keys_org ON api_keys;
 CREATE POLICY api_keys_org ON api_keys
     USING (org_id = current_setting('app.org_id', true)::uuid);
 
@@ -85,6 +88,7 @@ CREATE INDEX IF NOT EXISTS embed_tokens_token ON embed_tokens(token);
 ALTER TABLE embed_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE embed_tokens FORCE  ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS embed_tokens_org ON embed_tokens;
 CREATE POLICY embed_tokens_org ON embed_tokens
     USING (org_id = current_setting('app.org_id', true)::uuid);
 
@@ -107,6 +111,7 @@ CREATE INDEX IF NOT EXISTS archived_events_org_ts
 ALTER TABLE archived_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE archived_events FORCE  ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS archived_events_org ON archived_events;
 CREATE POLICY archived_events_org ON archived_events
     USING (org_id = current_setting('app.org_id', true)::uuid);
 
@@ -129,6 +134,7 @@ CREATE INDEX IF NOT EXISTS scheduled_reports_org ON scheduled_reports(org_id);
 ALTER TABLE scheduled_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scheduled_reports FORCE  ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS scheduled_reports_org ON scheduled_reports;
 CREATE POLICY scheduled_reports_org ON scheduled_reports
     USING (org_id = current_setting('app.org_id', true)::uuid);
 
@@ -149,6 +155,7 @@ CREATE INDEX IF NOT EXISTS event_schemas_org ON event_schemas(org_id);
 ALTER TABLE event_schemas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE event_schemas FORCE  ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS event_schemas_org ON event_schemas;
 CREATE POLICY event_schemas_org ON event_schemas
     USING (org_id = current_setting('app.org_id', true)::uuid);
 
@@ -167,6 +174,7 @@ CREATE INDEX IF NOT EXISTS schema_violations_org_ts ON schema_violations(org_id,
 ALTER TABLE schema_violations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE schema_violations FORCE  ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS schema_violations_org ON schema_violations;
 CREATE POLICY schema_violations_org ON schema_violations
     USING (org_id = current_setting('app.org_id', true)::uuid);
 
@@ -187,6 +195,7 @@ CREATE INDEX IF NOT EXISTS pii_redactions_org ON pii_redactions(org_id);
 ALTER TABLE pii_redactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pii_redactions FORCE  ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS pii_redactions_org ON pii_redactions;
 CREATE POLICY pii_redactions_org ON pii_redactions
     USING (org_id = current_setting('app.org_id', true)::uuid);
 

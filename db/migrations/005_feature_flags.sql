@@ -40,5 +40,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON feature_flags TO app_user;
 ALTER TABLE feature_flags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE feature_flags FORCE  ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS feature_flags_org ON feature_flags;
 CREATE POLICY feature_flags_org ON feature_flags
   USING (org_id::text = current_setting('app.org_id', true));

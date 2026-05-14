@@ -50,7 +50,9 @@ ALTER TABLE anomaly_events    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE anomaly_baselines FORCE  ROW LEVEL SECURITY;
 ALTER TABLE anomaly_events    FORCE  ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS anomaly_baselines_org ON anomaly_baselines;
 CREATE POLICY anomaly_baselines_org ON anomaly_baselines
   USING (org_id::text = current_setting('app.org_id', true));
+DROP POLICY IF EXISTS anomaly_events_org ON anomaly_events;
 CREATE POLICY anomaly_events_org ON anomaly_events
   USING (org_id::text = current_setting('app.org_id', true));
