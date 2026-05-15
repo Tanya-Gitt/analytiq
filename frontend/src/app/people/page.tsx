@@ -113,12 +113,13 @@ function EventTimeline({ detail }: { detail: UserDetail }) {
 // ── Profile panel ─────────────────────────────────────────────────────────────
 
 function ProfilePanel({ userId }: { userId: string }) {
-  const { data, isLoading, error } = useSWR(
+  const { data, isLoading, error, mutate } = useSWR(
     ['person', userId],
     () => getPerson(userId, 50, 0),
+    { refreshInterval: 8000, shouldRetryOnError: true, errorRetryInterval: 8000 },
   );
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <div className="space-y-3 p-4">
         {[80, 60, 100, 60, 80].map((w, i) => (
@@ -129,10 +130,16 @@ function ProfilePanel({ userId }: { userId: string }) {
   }
   if (error || !data) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-2">
-        <p className="text-2xl">⚠️</p>
-        <p className="text-sm font-medium text-gray-600">Could not load profile</p>
-        <p className="text-xs text-gray-400">{error?.message ?? 'No data returned'}</p>
+      <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-3">
+        <p className="text-2xl">⏳</p>
+        <p className="text-sm font-medium text-gray-600">Backend waking up…</p>
+        <p className="text-xs text-gray-400">Retrying automatically every 8 seconds</p>
+        <button
+          onClick={() => mutate()}
+          className="mt-1 text-xs px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100"
+        >
+          Retry now
+        </button>
       </div>
     );
   }
