@@ -116,7 +116,7 @@ function ProfilePanel({ userId }: { userId: string }) {
   const { data, isLoading, error, mutate } = useSWR(
     ['person', userId],
     () => getPerson(userId, 50, 0),
-    { refreshInterval: 8000, shouldRetryOnError: true, errorRetryInterval: 8000 },
+    { refreshInterval: 10000, shouldRetryOnError: true, errorRetryInterval: 3000 },
   );
 
   if (isLoading && !data) {

@@ -20,9 +20,11 @@ export default function AppShell({ children, fullBleed = false }: AppShellProps)
       router.replace('/login');
       return;
     }
-    // Ping on every mount so Render wakes up before the user interacts.
-    // Uses no-cors so it doesn't block on CORS errors — just fires and forgets.
-    fetch(`${BASE}/system/health`, { mode: 'no-cors' }).catch(() => {});
+    // Ping immediately on mount, then every 4 minutes to prevent Render free-tier sleep.
+    const ping = () => fetch(`${BASE}/system/health`, { mode: 'no-cors' }).catch(() => {});
+    ping();
+    const id = setInterval(ping, 4 * 60 * 1000);
+    return () => clearInterval(id);
   }, [router]);
 
   return (
