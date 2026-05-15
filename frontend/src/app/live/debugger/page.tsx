@@ -100,8 +100,17 @@ export default function LiveDebuggerPage() {
           {/* Event list */}
           <div className="flex-1 border border-gray-200 rounded-lg overflow-y-auto max-h-[calc(100vh-280px)] divide-y divide-gray-100">
             {filtered.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-gray-400">
-                {connected ? 'Waiting for events…' : 'Connecting to event stream…'}
+              <div className="px-4 py-8 text-center text-sm text-gray-400 space-y-2">
+                {connected ? (
+                  <p>Waiting for events…</p>
+                ) : (
+                  <>
+                    <p className="font-medium text-gray-500">Connecting to event stream…</p>
+                    <p className="text-xs text-gray-400 max-w-xs mx-auto">
+                      The backend may be waking up (free-tier sleep). This usually takes 30–60 seconds on first load.
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               filtered.map(ev => (

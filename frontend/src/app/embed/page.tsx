@@ -19,7 +19,7 @@ interface EmbedToken {
 }
 
 const authFetch = (url: string) =>
-  fetch(`/api/${url}`, { headers: { Authorization: `Bearer ${getToken()}` } })
+  fetch(`${BASE}/${url}`, { headers: { Authorization: `Bearer ${getToken()}` } })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); });
 
 const WIDGET_TYPES = ['events_chart', 'top_events', 'funnel'];
@@ -68,7 +68,7 @@ export default function EmbedPage() {
 
   async function doRevoke(id: number) {
     const token = getToken();
-    await fetch(`/api/embed/tokens/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    await fetch(`${BASE}/embed/tokens/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
     await mutate();
     flash('Token revoked', true);
   }

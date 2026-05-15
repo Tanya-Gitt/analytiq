@@ -113,7 +113,7 @@ function EventTimeline({ detail }: { detail: UserDetail }) {
 // ── Profile panel ─────────────────────────────────────────────────────────────
 
 function ProfilePanel({ userId }: { userId: string }) {
-  const { data, isLoading } = useSWR(
+  const { data, isLoading, error } = useSWR(
     ['person', userId],
     () => getPerson(userId, 50, 0),
   );
@@ -127,7 +127,15 @@ function ProfilePanel({ userId }: { userId: string }) {
       </div>
     );
   }
-  if (!data) return null;
+  if (error || !data) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-2">
+        <p className="text-2xl">⚠️</p>
+        <p className="text-sm font-medium text-gray-600">Could not load profile</p>
+        <p className="text-xs text-gray-400">{error?.message ?? 'No data returned'}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 p-4">

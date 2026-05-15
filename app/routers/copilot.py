@@ -17,7 +17,7 @@ Security model
    client (no raw pg errors that could leak schema info).
 4. Row cap: max 500 rows returned regardless of what Claude generates.
 
-Requires: GROQ_API_KEY environment variable.
+Requires: ANTHROPIC_API_KEY environment variable.
 """
 
 from __future__ import annotations
@@ -26,14 +26,16 @@ import json
 import logging
 import os
 import re
+import time
+from threading import Lock
 from typing import Any
 
+import anthropic
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
-from groq import AsyncGroq
 from pydantic import BaseModel
 
-from app.deps import get_org_db
+from app.deps import get_org_db, get_org_id_from_jwt
 
 logger = logging.getLogger(__name__)
 
@@ -113,11 +115,44 @@ Output JSON format (no other text):
 _BLOCKED = re.compile(
     r'\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|COPY|'
     r'EXPLAIN|VACUUM|ANALYZE|REINDEX|CLUSTER|COMMENT|LOCK|NOTIFY|LISTEN|'
-    r'UNLISTEN|LOAD|RESET|SHOW|pg_read_file|pg_ls_dir|pg_stat_file)\b',
+    r'UNLISTEN|LOAD|RESET|SHOW|pg_read_file|pg_ls_dir|pg_stat_file|'
+    # UNION allows schema-disclosure via information_schema / pg_catalog:
+    # SELECT * FROM events UNION ALL SELECT table_name FROM information_schema.tables
+    r'UNION|'
+    # pg_catalog / information_schema access exposes schema metadata
+    r'pg_catalog|information_schema|pg_class|pg_namespace|pg_attribute|'
+    r'pg_tables|pg_views|pg_indexes|pg_stat_|pg_proc|pg_roles|pg_shadow|'
+    # Prevent out-of-band channel abuse
+    r'dblink|postgres_fdw|file_fdw|lo_export|lo_import|pg_write_file)\b',
     re.IGNORECASE,
 )
 
 _MAX_ROWS = 500
+
+# ── Per-org rate limiting for copilot (sliding window, in-process) ────────────
+# 10 requests per org per 60-second window — prevents API cost abuse.
+# For multi-replica deployments replace with Redis-backed rate limiting.
+
+_COPILOT_RATE_LIMIT = 10      # max requests
+_COPILOT_RATE_WINDOW = 60     # seconds
+_copilot_buckets: dict[str, list[float]] = {}
+_copilot_lock = Lock()
+
+
+def _copilot_rate_check(org_id: str) -> bool:
+    """Return True if the request is within rate limit, False if exceeded."""
+    now = time.monotonic()
+    cutoff = now - _COPILOT_RATE_WINDOW
+    with _copilot_lock:
+        timestamps = _copilot_buckets.get(org_id, [])
+        # Discard timestamps outside the window
+        timestamps = [t for t in timestamps if t > cutoff]
+        if len(timestamps) >= _COPILOT_RATE_LIMIT:
+            _copilot_buckets[org_id] = timestamps
+            return False
+        timestamps.append(now)
+        _copilot_buckets[org_id] = timestamps
+    return True
 
 
 def _validate_sql(sql: str) -> str:
@@ -148,34 +183,30 @@ def _validate_sql(sql: str) -> str:
     return sql
 
 
-# ── Groq call ────────────────────────────────────────────────────────────────
+# ── Claude call ───────────────────────────────────────────────────────────────
 
-_GROQ_MODEL = "llama-3.3-70b-versatile"
+_CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
 
-def _get_client() -> AsyncGroq:
-    key = os.environ.get("GROQ_API_KEY", "")
+def _get_client() -> anthropic.AsyncAnthropic:
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not key:
         raise HTTPException(
             status_code=503,
-            detail="AI Copilot is not configured. Set GROQ_API_KEY in your environment.",
+            detail="AI Copilot is not configured. Set ANTHROPIC_API_KEY in your environment.",
         )
-    return AsyncGroq(api_key=key)
+    return anthropic.AsyncAnthropic(api_key=key)
 
 
-async def _ask_groq(question: str) -> dict[str, Any]:
+async def _ask_claude(question: str) -> dict[str, Any]:
     client = _get_client()
-    completion = await client.chat.completions.create(
-        model=_GROQ_MODEL,
+    message = await client.messages.create(
+        model=_CLAUDE_MODEL,
         max_tokens=1024,
-        temperature=0,
-        messages=[
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user",   "content": question},
-        ],
-        response_format={"type": "json_object"},
+        system=_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": question}],
     )
-    raw = completion.choices[0].message.content or ""
+    raw = message.content[0].text if message.content else ""
     raw = raw.strip()
 
     # Strip markdown code fences if the model wraps in them
@@ -185,7 +216,7 @@ async def _ask_groq(question: str) -> dict[str, Any]:
     try:
         return json.loads(raw)
     except json.JSONDecodeError as exc:
-        logger.warning("Groq returned non-JSON: %s", raw[:200])
+        logger.warning("Claude returned non-JSON: %s", raw[:200])
         raise HTTPException(status_code=502, detail=f"AI returned malformed response: {exc}") from exc
 
 
@@ -246,12 +277,15 @@ class QueryResponse(BaseModel):
 
 @router.post("/copilot/query", response_model=QueryResponse)
 async def copilot_query(
-    body: QueryRequest,
-    db:   asyncpg.Connection = Depends(get_org_db),
+    body:   QueryRequest,
+    org_id: str = Depends(get_org_id_from_jwt),
+    db:     asyncpg.Connection = Depends(get_org_db),
 ):
     """
     Accepts a natural-language question. Returns SQL + tabular result +
     chart spec + one-sentence insight.
+
+    Rate limit: 10 requests per org per 60-second sliding window.
     """
     question = body.question.strip()
     if not question:
@@ -259,8 +293,16 @@ async def copilot_query(
     if len(question) > 1000:
         raise HTTPException(400, "question too long (max 1000 chars)")
 
-    # 1. Ask Groq for SQL + chart spec
-    ai_resp = await _ask_groq(question)
+    # Per-org rate limit: prevent financial abuse of the Groq API
+    if not _copilot_rate_check(org_id):
+        raise HTTPException(
+            status_code=429,
+            detail="AI Copilot rate limit exceeded. Try again in a minute.",
+            headers={"Retry-After": str(_COPILOT_RATE_WINDOW)},
+        )
+
+    # 1. Ask Claude for SQL + chart spec
+    ai_resp = await _ask_claude(question)
 
     raw_sql = ai_resp.get("sql", "")
     if not raw_sql:
