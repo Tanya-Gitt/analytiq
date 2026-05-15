@@ -21,7 +21,7 @@ export default function AppShell({ children, fullBleed = false }: AppShellProps)
       return;
     }
     // Ping immediately on mount, then every 4 minutes to prevent Render free-tier sleep.
-    const ping = () => fetch(`${BASE}/system/health`, { mode: 'no-cors' }).catch(() => {});
+    const ping = () => fetch(`${BASE}/system/ping`, { mode: 'no-cors' }).catch(() => {});
     ping();
     const id = setInterval(ping, 4 * 60 * 1000);
     return () => clearInterval(id);

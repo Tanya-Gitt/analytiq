@@ -15,9 +15,24 @@ from datetime import datetime, timezone
 import asyncpg
 from fastapi import APIRouter, Depends
 
+from app.database import get_pool
 from app.deps import get_org_db
 
 router = APIRouter()
+
+
+# ── Unauthenticated DB wake-up ping ───────────────────────────────────────────
+
+@router.get("/system/ping")
+async def ping_db(pool: asyncpg.Pool = Depends(get_pool)):
+    """No auth required. Wakes Neon DB from serverless sleep so subsequent
+    authenticated requests don't time out waiting for a connection."""
+    conn = await pool.acquire()
+    try:
+        await conn.execute("SELECT 1")
+    finally:
+        await pool.release(conn)
+    return {"ok": True}
 
 
 # ── Health check ──────────────────────────────────────────────────────────────
