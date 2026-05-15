@@ -283,6 +283,14 @@ async def reseed_misc(secret: str = "", pool: asyncpg.Pool = Depends(get_pool)):
     """Re-insert all misc demo data: flags, alerts, funnels, connectors, reports, annotations, anomalies."""
     if not _SECRET or secret != _SECRET:
         raise HTTPException(403, "invalid or missing secret")
+    try:
+        return await _do_reseed_misc(pool)
+    except Exception as exc:
+        import traceback
+        raise HTTPException(500, detail=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}")
+
+
+async def _do_reseed_misc(pool: asyncpg.Pool):
 
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
