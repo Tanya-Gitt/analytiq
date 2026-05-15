@@ -2,9 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react';
 import AppShell from '@/components/layout/AppShell';
-import { getToken } from '@/lib/auth';
-
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api';
 
 interface LiveEvent {
   id: string;
@@ -16,39 +13,119 @@ interface LiveEvent {
   pii_fields?: string[];
 }
 
-export default function LiveDebuggerPage() {
-  const [events, setEvents]       = useState<LiveEvent[]>([]);
-  const [paused, setPaused]       = useState(false);
-  const [filter, setFilter]       = useState('');
-  const [selected, setSelected]   = useState<LiveEvent | null>(null);
-  const [connected, setConnected] = useState(false);
-  const pausedRef  = useRef(paused);
-  const eventsRef  = useRef(events);
-  const esRef      = useRef<EventSource | null>(null);
+// ── Synthetic event stream ────────────────────────────────────────────────────
+//
+// The real-time SSE stream requires a long-lived connection to the FastAPI
+// backend, which sleeps on Render's free tier. To keep this view useful for
+// demo visitors we simulate a realistic event firehose locally — same shape
+// as the real `/stream/live` payload.
 
+const USERS = [
+  'usr_regular_065', 'usr_power_035',     'usr_regular_113',
+  'usr_occasional_016', 'usr_regular_079', 'usr_regular_155',
+  'usr_regular_130', 'usr_regular_027', null, null,
+];
+
+const PAGES    = ['/dashboard', '/funnels', '/people', '/copilot', '/heatmaps', '/pricing', '/settings'];
+const FEATURES = ['cohort_export', 'funnel_builder', 'sql_runner', 'pdf_report', 'flag_create'];
+const PLANS    = ['free', 'starter', 'pro', 'enterprise'];
+
+type EventTemplate = () => Pick<LiveEvent, 'event_name' | 'properties' | 'pii_fields'>;
+
+const TEMPLATES: EventTemplate[] = [
+  () => ({
+    event_name: 'page_view',
+    properties: {
+      page:       PAGES[Math.floor(Math.random() * PAGES.length)],
+      duration_s: Math.floor(Math.random() * 240),
+      referrer:   'https://twitter.com',
+    },
+  }),
+  () => ({
+    event_name: 'feature_used',
+    properties: { feature: FEATURES[Math.floor(Math.random() * FEATURES.length)] },
+  }),
+  () => ({
+    event_name: 'button_click',
+    properties: { label: 'Upgrade plan', location: 'navbar' },
+  }),
+  () => ({
+    event_name: 'purchase',
+    properties: {
+      plan:    PLANS[Math.floor(Math.random() * PLANS.length)],
+      amount:  [49, 99, 199, 588, 1188][Math.floor(Math.random() * 5)],
+      billing: Math.random() < 0.4 ? 'annual' : 'monthly',
+    },
+  }),
+  () => ({
+    event_name: 'identify',
+    properties: {
+      email: '[REDACTED]',
+      name:  '[REDACTED]',
+      plan:  PLANS[Math.floor(Math.random() * PLANS.length)],
+    },
+    pii_fields: ['email', 'name'],
+  }),
+  () => ({
+    event_name: 'signup',
+    properties: {
+      email:  '[REDACTED]',
+      source: 'organic',
+    },
+    pii_fields: ['email'],
+  }),
+  () => ({
+    event_name: 'session_start',
+    properties: {
+      utm_source:   ['twitter', 'google', 'linkedin', 'direct'][Math.floor(Math.random() * 4)],
+      utm_campaign: 'q2_launch',
+      device:       Math.random() < 0.6 ? 'desktop' : 'mobile',
+    },
+  }),
+];
+
+function makeFakeEvent(): LiveEvent {
+  const tpl  = TEMPLATES[Math.floor(Math.random() * TEMPLATES.length)]();
+  const user = USERS[Math.floor(Math.random() * USERS.length)];
+  return {
+    id:           `${Date.now()}-${Math.random()}`,
+    event_name:   tpl.event_name,
+    user_id:      user,
+    anonymous_id: user ? null : `anon_${Math.random().toString(36).slice(2, 10)}`,
+    properties:   tpl.properties,
+    received_at:  new Date().toISOString(),
+    pii_fields:   tpl.pii_fields,
+  };
+}
+
+export default function LiveDebuggerPage() {
+  const [events, setEvents]     = useState<LiveEvent[]>([]);
+  const [paused, setPaused]     = useState(false);
+  const [filter, setFilter]     = useState('');
+  const [selected, setSelected] = useState<LiveEvent | null>(null);
+  const pausedRef = useRef(paused);
   pausedRef.current = paused;
-  eventsRef.current = events;
 
   useEffect(() => {
-    const token = getToken();
-    const es = new EventSource(`${BASE}/stream/live?token=${token}`);
-    esRef.current = es;
+    // Seed with a small backlog so the view isn't empty on first paint.
+    setEvents(Array.from({ length: 6 }, () => {
+      const ev = makeFakeEvent();
+      ev.received_at = new Date(Date.now() - Math.random() * 60_000).toISOString();
+      return ev;
+    }));
 
-    es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
-
-    es.onmessage = (e) => {
-      if (pausedRef.current) return;
-      try {
-        const ev: LiveEvent = JSON.parse(e.data);
-        ev.id = `${Date.now()}-${Math.random()}`;
-        setEvents(prev => [ev, ...prev].slice(0, 200));
-      } catch {
-        // ignore parse errors
+    const tick = () => {
+      if (!pausedRef.current) {
+        setEvents(prev => [makeFakeEvent(), ...prev].slice(0, 200));
       }
     };
-
-    return () => es.close();
+    // Random cadence between 800ms and 2200ms feels like a real firehose.
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      timer = setTimeout(() => { tick(); schedule(); }, 800 + Math.random() * 1400);
+    };
+    schedule();
+    return () => clearTimeout(timer);
   }, []);
 
   const filtered = filter
@@ -72,9 +149,9 @@ export default function LiveDebuggerPage() {
             <p className="text-sm text-gray-500 mt-1">Real-time event stream with PII detection</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full ${connected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-              <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-              {connected ? 'Live' : 'Disconnected'}
+            <span className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              Live (demo)
             </span>
             <button
               className={`text-xs px-3 py-1.5 border rounded-lg font-medium transition-colors ${paused ? 'bg-green-600 text-white border-green-600' : 'bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-200'}`}
@@ -88,6 +165,21 @@ export default function LiveDebuggerPage() {
           </div>
         </div>
 
+        {/* Demo-data disclaimer */}
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 flex gap-2.5">
+          <span className="text-amber-600 text-sm shrink-0 mt-0.5">ℹ️</span>
+          <div className="text-[11px] text-amber-900 leading-relaxed">
+            <p className="font-semibold mb-0.5">Simulated event stream · sample data</p>
+            <p className="text-amber-800">
+              The real <code className="px-1 bg-amber-100 rounded">/stream/live</code> SSE
+              endpoint requires a long-lived connection to the backend, which sleeps on
+              free-tier Render. To keep this view usable for demo visitors, events are
+              generated in-browser with the same payload shape as production. Pause,
+              filter, click-to-inspect and PII detection all work the same way.
+            </p>
+          </div>
+        </div>
+
         {/* Filter */}
         <input
           className="input w-full"
@@ -98,19 +190,10 @@ export default function LiveDebuggerPage() {
 
         <div className="flex gap-4">
           {/* Event list */}
-          <div className="flex-1 border border-gray-200 rounded-lg overflow-y-auto max-h-[calc(100vh-280px)] divide-y divide-gray-100">
+          <div className="flex-1 border border-gray-200 rounded-lg overflow-y-auto max-h-[calc(100vh-320px)] divide-y divide-gray-100">
             {filtered.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-gray-400 space-y-2">
-                {connected ? (
-                  <p>Waiting for events…</p>
-                ) : (
-                  <>
-                    <p className="font-medium text-gray-500">Connecting to event stream…</p>
-                    <p className="text-xs text-gray-400 max-w-xs mx-auto">
-                      The backend may be waking up (free-tier sleep). This usually takes 30–60 seconds on first load.
-                    </p>
-                  </>
-                )}
+              <div className="px-4 py-8 text-center text-sm text-gray-400">
+                Waiting for events…
               </div>
             ) : (
               filtered.map(ev => (
@@ -140,7 +223,7 @@ export default function LiveDebuggerPage() {
 
           {/* Detail panel */}
           {selected && (
-            <div className="w-80 border border-gray-200 rounded-lg p-4 space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
+            <div className="w-80 border border-gray-200 rounded-lg p-4 space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-gray-800 font-mono text-sm">{selected.event_name}</h3>
                 <button className="text-xs text-gray-400 hover:text-gray-600" onClick={() => setSelected(null)}>✕</button>

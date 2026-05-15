@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import AppShell from '@/components/layout/AppShell';
-import { listPeople, getPerson, type UserProfile, type UserDetail } from '@/lib/api';
+import { listPeople, type UserProfile } from '@/lib/api';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -82,7 +82,8 @@ function TraitsPanel({ traits }: { traits: Record<string, unknown> }) {
 
 // ── Event timeline ────────────────────────────────────────────────────────────
 
-function EventTimeline({ detail }: { detail: UserDetail }) {
+type EventLike = { name: string; received_at: string; properties: Record<string, unknown> };
+function EventTimeline({ detail }: { detail: { events: EventLike[]; total_events: number } }) {
   return (
     <div className="space-y-1">
       {detail.events.map((e, i) => (
@@ -110,69 +111,87 @@ function EventTimeline({ detail }: { detail: UserDetail }) {
   );
 }
 
-// ── Profile panel ─────────────────────────────────────────────────────────────
+// ── Profile panel (static demo data) ──────────────────────────────────────────
+//
+// Live per-user profile lookups require the Neon Postgres backend, which sleeps
+// on the free tier and frequently times out the first request. To keep the
+// demo usable for visitors we render a representative static profile here —
+// same shape as the real API response, just hard-coded.
+
+const STATIC_TRAITS: Record<string, unknown> = {
+  email:        'avery.chen@acmehq.io',
+  name:         'Avery Chen',
+  plan:         'Pro (annual)',
+  company:      'Acme HQ',
+  role:         'Growth Manager',
+  country:      'United States',
+  signup_date:  '2025-08-14',
+  last_login:   '2026-05-15',
+  device:       'MacBook Pro · Chrome 138',
+  referrer:     'twitter.com',
+};
+
+const STATIC_EVENTS = [
+  { name: 'purchase',         minsAgo:    8, properties: { plan: 'pro_annual', amount: 588, billing: 'annual' } },
+  { name: 'checkout_started', minsAgo:   12, properties: { plan: 'pro_annual', cart_value: 588 } },
+  { name: 'feature_used',     minsAgo:   34, properties: { feature: 'cohort_export', format: 'csv' } },
+  { name: 'page_view',        minsAgo:   41, properties: { page: '/dashboard',       duration_s: 187 } },
+  { name: 'page_view',        minsAgo:   45, properties: { page: '/funnels',         duration_s: 92 } },
+  { name: 'feature_used',     minsAgo:   58, properties: { feature: 'funnel_builder' } },
+  { name: 'page_view',        minsAgo:   72, properties: { page: '/people',          duration_s: 145 } },
+  { name: 'identify',         minsAgo:   90, properties: { source: 'sso_google' } },
+  { name: 'page_view',        minsAgo:  240, properties: { page: '/login',           duration_s: 11 } },
+  { name: 'session_start',    minsAgo:  241, properties: { utm_source: 'twitter', utm_campaign: 'q2_launch' } },
+];
 
 function ProfilePanel({ userId }: { userId: string }) {
-  const { data, isLoading, error, mutate } = useSWR(
-    ['person', userId],
-    () => getPerson(userId, 50, 0),
-    { refreshInterval: 10000, shouldRetryOnError: true, errorRetryInterval: 3000 },
-  );
-
-  if (isLoading && !data) {
-    return (
-      <div className="space-y-3 p-4">
-        {[80, 60, 100, 60, 80].map((w, i) => (
-          <div key={i} className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: `${w}%` }} />
-        ))}
-      </div>
-    );
-  }
-  if (error || !data) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-3">
-        <p className="text-2xl">⚠️</p>
-        <p className="text-sm font-medium text-gray-600">Could not load profile</p>
-        <p className="text-xs text-red-500 font-mono px-4 text-center break-all">{error?.message ?? 'No data'}</p>
-        <button
-          onClick={() => mutate()}
-          className="mt-1 text-xs px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100"
-        >
-          Retry now
-        </button>
-      </div>
-    );
-  }
+  const now = Date.now();
+  const events = STATIC_EVENTS.map(e => ({
+    name:        e.name,
+    properties:  e.properties as Record<string, unknown>,
+    received_at: new Date(now - e.minsAgo * 60_000).toISOString(),
+  }));
 
   return (
     <div className="space-y-4 p-4">
+      {/* Demo-data disclaimer */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 flex gap-2.5">
+        <span className="text-amber-600 text-sm shrink-0 mt-0.5">ℹ️</span>
+        <div className="text-[11px] text-amber-900 leading-relaxed">
+          <p className="font-semibold mb-0.5">Demo profile · sample data</p>
+          <p className="text-amber-800">
+            This deployment runs on free-tier Render + Neon, which sleep when
+            idle. Per-user profile lookups would otherwise time out on first
+            click. Every user shows the same representative profile so the UI
+            stays usable. The list, filters, and other dashboards above use
+            real cached data from the seeded org.
+          </p>
+        </div>
+      </div>
+
       {/* Avatar + name */}
       <div className="flex items-center gap-3">
         <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-lg font-bold">
-          {(data.traits?.name as string)?.[0]?.toUpperCase() ||
-           (data.traits?.email as string)?.[0]?.toUpperCase() ||
-           data.user_id[0].toUpperCase()}
+          {(STATIC_TRAITS.name as string)[0].toUpperCase()}
         </div>
         <div>
-          <p className="font-semibold text-gray-900">
-            {(data.traits?.name as string) || (data.traits?.email as string) || data.user_id}
-          </p>
-          <p className="text-xs text-gray-400 font-mono">{data.user_id}</p>
+          <p className="font-semibold text-gray-900">{STATIC_TRAITS.name as string}</p>
+          <p className="text-xs text-gray-400 font-mono">{userId}</p>
         </div>
       </div>
 
       {/* Traits */}
       <div className="bg-gray-50 rounded-xl p-3">
         <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Traits</p>
-        <TraitsPanel traits={data.traits} />
+        <TraitsPanel traits={STATIC_TRAITS} />
       </div>
 
       {/* Event timeline */}
       <div>
         <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">
-          Event History · {data.total_events.toLocaleString()} total
+          Event History · 1,284 total
         </p>
-        <EventTimeline detail={data} />
+        <EventTimeline detail={{ events, total_events: 1284 }} />
       </div>
     </div>
   );
