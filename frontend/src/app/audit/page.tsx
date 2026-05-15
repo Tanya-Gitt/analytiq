@@ -1,9 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import useSWR from 'swr';
+import { useState, useMemo } from 'react';
 import AppShell from '@/components/layout/AppShell';
-import { type AuditPage, listAudit } from '@/lib/api';
 
 const CATEGORIES = [
   { value: '',          label: 'All' },
@@ -32,17 +30,70 @@ const ACTION_COLORS: Record<string, string> = {
   'storage.archive':        'bg-purple-100 text-purple-700',
 };
 
+// ── Static demo audit entries ─────────────────────────────────────────────────
+//
+// The audit log table is empty in the seeded org (the seeder only writes
+// events + orders, not audit rows). To showcase the feature for demo visitors
+// we render a plausible 30-day history of admin activity here.
+
+interface AuditEntry {
+  id:            string;
+  created_at:    string;
+  actor_email:   string | null;
+  action:        string;
+  category:      string;
+  resource_type: string | null;
+  metadata:      Record<string, unknown>;
+}
+
+const STATIC_ENTRIES: AuditEntry[] = (() => {
+  const now = Date.now();
+  const min = 60_000;
+  const hr  = 60 * min;
+  const day = 24 * hr;
+  const t = (offset: number) => new Date(now - offset).toISOString();
+
+  return [
+    { id: '1',  created_at: t(8 * min),       actor_email: 'avery@acmehq.io',      action: 'flag.updated',         category: 'flag',      resource_type: 'feature_flag', metadata: { flag: 'new_checkout_v2', rollout_pct: 50 } },
+    { id: '2',  created_at: t(42 * min),      actor_email: 'priya@acmehq.io',      action: 'alert.created',        category: 'alert',     resource_type: 'alert',        metadata: { name: 'High error rate', channel: 'slack' } },
+    { id: '3',  created_at: t(2 * hr),        actor_email: 'avery@acmehq.io',      action: 'connector.created',    category: 'connector', resource_type: 'connector',    metadata: { type: 'webhook', target: 'hooks.slack.com' } },
+    { id: '4',  created_at: t(3 * hr),        actor_email: 'priya@acmehq.io',      action: 'gdpr.export',          category: 'gdpr',      resource_type: 'user',         metadata: { user_id: 'usr_regular_065', format: 'json' } },
+    { id: '5',  created_at: t(5 * hr),        actor_email: 'demo@analytiq.io',     action: 'member.invited',       category: 'team',      resource_type: 'member',       metadata: { invited: 'jordan@acmehq.io', role: 'analyst' } },
+    { id: '6',  created_at: t(8 * hr),        actor_email: 'avery@acmehq.io',      action: 'flag.created',         category: 'flag',      resource_type: 'feature_flag', metadata: { flag: 'dark_mode_beta', rollout_pct: 10 } },
+    { id: '7',  created_at: t(14 * hr),       actor_email: 'jordan@acmehq.io',     action: 'storage.archive',      category: 'storage',   resource_type: 'event',        metadata: { older_than: '90d', rows: 1284039 } },
+    { id: '8',  created_at: t(1 * day),       actor_email: 'priya@acmehq.io',      action: 'alert.created',        category: 'alert',     resource_type: 'alert',        metadata: { name: 'Revenue drop > 20%', channel: 'email' } },
+    { id: '9',  created_at: t(1 * day + 3 * hr),  actor_email: 'avery@acmehq.io',  action: 'gdpr.opt_out',         category: 'gdpr',      resource_type: 'user',         metadata: { user_id: 'usr_occasional_016' } },
+    { id: '10', created_at: t(1 * day + 7 * hr),  actor_email: 'demo@analytiq.io', action: 'member.role_changed', category: 'team',      resource_type: 'member',       metadata: { member: 'jordan@acmehq.io', from: 'analyst', to: 'admin' } },
+    { id: '11', created_at: t(2 * day),       actor_email: 'priya@acmehq.io',      action: 'flag.updated',         category: 'flag',      resource_type: 'feature_flag', metadata: { flag: 'new_checkout_v2', rollout_pct: 25 } },
+    { id: '12', created_at: t(2 * day + 5 * hr),  actor_email: 'avery@acmehq.io',  action: 'connector.created',    category: 'connector', resource_type: 'connector',    metadata: { type: 'segment', target: 'cdp.segment.com' } },
+    { id: '13', created_at: t(3 * day),       actor_email: 'jordan@acmehq.io',     action: 'gdpr.forget',          category: 'gdpr',      resource_type: 'user',         metadata: { user_id: 'usr_churned_002', records_deleted: 412 } },
+    { id: '14', created_at: t(3 * day + 6 * hr),  actor_email: 'demo@analytiq.io', action: 'alert.deleted',        category: 'alert',     resource_type: 'alert',        metadata: { name: 'Old test alert' } },
+    { id: '15', created_at: t(4 * day),       actor_email: 'avery@acmehq.io',      action: 'flag.created',         category: 'flag',      resource_type: 'feature_flag', metadata: { flag: 'pricing_v3', rollout_pct: 0 } },
+    { id: '16', created_at: t(5 * day),       actor_email: 'priya@acmehq.io',      action: 'connector.deleted',    category: 'connector', resource_type: 'connector',    metadata: { type: 'webhook', target: 'old-endpoint.example.com' } },
+    { id: '17', created_at: t(6 * day),       actor_email: 'demo@analytiq.io',     action: 'member.invited',       category: 'team',      resource_type: 'member',       metadata: { invited: 'priya@acmehq.io', role: 'admin' } },
+    { id: '18', created_at: t(7 * day),       actor_email: 'avery@acmehq.io',      action: 'gdpr.opt_out_removed', category: 'gdpr',      resource_type: 'user',         metadata: { user_id: 'usr_regular_113' } },
+    { id: '19', created_at: t(9 * day),       actor_email: 'avery@acmehq.io',      action: 'flag.deleted',         category: 'flag',      resource_type: 'feature_flag', metadata: { flag: 'deprecated_onboarding_v1' } },
+    { id: '20', created_at: t(11 * day),      actor_email: 'demo@analytiq.io',     action: 'connector.created',    category: 'connector', resource_type: 'connector',    metadata: { type: 'bigquery', target: 'analytics-prod.events' } },
+    { id: '21', created_at: t(14 * day),      actor_email: 'priya@acmehq.io',      action: 'alert.created',        category: 'alert',     resource_type: 'alert',        metadata: { name: 'DAU anomaly', channel: 'pagerduty' } },
+    { id: '22', created_at: t(18 * day),      actor_email: 'demo@analytiq.io',     action: 'member.removed',       category: 'team',      resource_type: 'member',       metadata: { removed: 'former-intern@acmehq.io' } },
+    { id: '23', created_at: t(22 * day),      actor_email: 'avery@acmehq.io',      action: 'storage.archive',      category: 'storage',   resource_type: 'event',        metadata: { older_than: '180d', rows: 4827193 } },
+    { id: '24', created_at: t(28 * day),      actor_email: 'demo@analytiq.io',     action: 'flag.created',         category: 'flag',      resource_type: 'feature_flag', metadata: { flag: 'new_checkout_v2', rollout_pct: 5 } },
+  ];
+})();
+
 const PAGE_SIZE = 25;
 
 export default function AuditPage() {
   const [category, setCategory] = useState('');
   const [offset,   setOffset]   = useState(0);
 
-  const fetcher = () => listAudit({ category: category || undefined, limit: PAGE_SIZE, offset });
-  const { data } = useSWR<AuditPage>(['audit', category, offset], fetcher);
+  const filtered = useMemo(
+    () => category ? STATIC_ENTRIES.filter(e => e.category === category) : STATIC_ENTRIES,
+    [category],
+  );
 
-  const entries = data?.entries ?? [];
-  const total   = data?.total   ?? 0;
+  const entries = filtered.slice(offset, offset + PAGE_SIZE);
+  const total   = filtered.length;
   const pages   = Math.ceil(total / PAGE_SIZE);
   const current = Math.floor(offset / PAGE_SIZE);
 
@@ -57,6 +108,20 @@ export default function AuditPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
         <p className="text-sm text-gray-500 mt-1">All admin actions across your organisation</p>
+      </div>
+
+      {/* Demo-data disclaimer */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 flex gap-2.5">
+        <span className="text-amber-600 text-sm shrink-0 mt-0.5">ℹ️</span>
+        <div className="text-[11px] text-amber-900 leading-relaxed">
+          <p className="font-semibold mb-0.5">Sample audit history</p>
+          <p className="text-amber-800">
+            The seeded demo org has no real admin activity, so this view shows a
+            representative 30-day log of flag changes, team edits, GDPR
+            requests, connector setup, and alert configuration. In production
+            every privileged action is automatically captured here.
+          </p>
+        </div>
       </div>
 
       {/* Category filter */}
