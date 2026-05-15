@@ -13,6 +13,12 @@ No SaaS fees. No data leaving your servers. One command to run.</p>
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql&logoColor=white)](https://postgresql.org)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ed?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose)
 
+<br/>
+
+**[🚀 Live Demo →](https://analytiq-phi.vercel.app)**
+
+> Login with `demo@analytiq.io` / `DemoAnalytiq2024!`
+
 </div>
 
 ---
