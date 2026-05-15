@@ -5,6 +5,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import type { EventsTimelinePoint, Annotation } from '@/lib/api';
+import { layoutAnnotations, makeAnnotationLabel } from './annotationLabel';
 
 interface Props {
   data: EventsTimelinePoint[];
@@ -20,9 +21,13 @@ export default function EventsChart({ data, annotations = [] }: Props) {
     );
   }
 
+  const layout = layoutAnnotations(annotations);
+  const maxLane = Math.max(0, ...Array.from(layout.values()).map(l => l.lane));
+  const topMargin = 24 + maxLane * 13;
+
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <BarChart data={data} margin={{ top: 24, right: 12, bottom: 0, left: 0 }}>
+      <BarChart data={data} margin={{ top: topMargin, right: 12, bottom: 0, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
         <XAxis
           dataKey="date"
@@ -48,12 +53,11 @@ export default function EventsChart({ data, annotations = [] }: Props) {
             stroke={ann.color}
             strokeWidth={2}
             strokeDasharray="4 2"
-            label={{
-              value: ann.label,
-              position: 'top',
-              fontSize: 10,
-              fill: ann.color,
-            }}
+            label={makeAnnotationLabel({
+              label:  ann.label,
+              color:  ann.color,
+              layout: layout.get(ann.id) ?? { lane: 0, anchor: 'middle' },
+            })}
           />
         ))}
         <Bar dataKey="count" fill="#6366f1" radius={[3, 3, 0, 0]} maxBarSize={40} />

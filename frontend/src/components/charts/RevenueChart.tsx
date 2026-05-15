@@ -5,6 +5,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import type { RevenueTrendPoint, Annotation } from '@/lib/api';
+import { layoutAnnotations, makeAnnotationLabel } from './annotationLabel';
 
 interface Props {
   data: RevenueTrendPoint[];
@@ -26,9 +27,13 @@ export default function RevenueChart({ data, annotations = [] }: Props) {
     );
   }
 
+  const layout = layoutAnnotations(annotations);
+  const maxLane = Math.max(0, ...Array.from(layout.values()).map(l => l.lane));
+  const topMargin = 24 + maxLane * 13;
+
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <AreaChart data={data} margin={{ top: 24, right: 12, bottom: 0, left: 0 }}>
+      <AreaChart data={data} margin={{ top: topMargin, right: 12, bottom: 0, left: 0 }}>
         <defs>
           <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.2} />
@@ -61,12 +66,11 @@ export default function RevenueChart({ data, annotations = [] }: Props) {
             stroke={ann.color}
             strokeWidth={2}
             strokeDasharray="4 2"
-            label={{
-              value: ann.label,
-              position: 'top',
-              fontSize: 10,
-              fill: ann.color,
-            }}
+            label={makeAnnotationLabel({
+              label:  ann.label,
+              color:  ann.color,
+              layout: layout.get(ann.id) ?? { lane: 0, anchor: 'middle' },
+            })}
           />
         ))}
         <Area
