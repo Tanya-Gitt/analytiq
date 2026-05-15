@@ -21,9 +21,8 @@ export default function EventsChart({ data, annotations = [] }: Props) {
     );
   }
 
-  const layout = layoutAnnotations(annotations);
-  const maxLane = Math.max(0, ...Array.from(layout.values()).map(l => l.lane));
-  const topMargin = 24 + maxLane * 13;
+  const { visible, layout } = layoutAnnotations(annotations);
+  const topMargin = 16 + visible.length * 13;
 
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -46,7 +45,7 @@ export default function EventsChart({ data, annotations = [] }: Props) {
           formatter={(v: number) => [v.toLocaleString(), 'Events']}
           contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
         />
-        {annotations.map(ann => (
+        {visible.map(ann => (
           <ReferenceLine
             key={ann.id}
             x={ann.date}
@@ -56,7 +55,7 @@ export default function EventsChart({ data, annotations = [] }: Props) {
             label={makeAnnotationLabel({
               label:  ann.label,
               color:  ann.color,
-              layout: layout.get(ann.id) ?? { lane: 0, anchor: 'middle' },
+              layout: layout.get(ann.id) ?? { lane: 0 },
             })}
           />
         ))}

@@ -3,6 +3,12 @@
 import { useState } from 'react';
 import { createAnnotation, deleteAnnotation, type Annotation } from '@/lib/api';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { MAX_VISIBLE_ANNOTATIONS } from '@/components/charts/annotationLabel';
+
+// Mirror of the backend cap (app/routers/annotations.py).
+// Only the most recent MAX_VISIBLE_ANNOTATIONS are drawn on the chart;
+// older ones still appear in the list below.
+const MAX_ANNOTATIONS = 20;
 
 const PRESET_COLORS = [
   '#6366f1', // indigo (default)
@@ -107,13 +113,21 @@ export default function AnnotationsPanel({ segment, annotations, onAdd, onDelete
                 />
               ))}
             </div>
-            <button
-              onClick={handleAdd}
-              disabled={saving || !date || !label.trim()}
-              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium px-4 py-1.5 rounded-lg transition-colors"
-            >
-              {saving ? 'Adding…' : 'Add marker'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleAdd}
+                disabled={saving || !date || !label.trim() || annotations.length >= MAX_ANNOTATIONS}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium px-4 py-1.5 rounded-lg transition-colors"
+              >
+                {saving ? 'Adding…' : 'Add marker'}
+              </button>
+              <span className={`text-[11px] ${annotations.length >= MAX_ANNOTATIONS ? 'text-red-500' : 'text-gray-400'}`}>
+                {annotations.length} / {MAX_ANNOTATIONS} used
+                {annotations.length > MAX_VISIBLE_ANNOTATIONS && (
+                  <span className="text-gray-400"> · only the {MAX_VISIBLE_ANNOTATIONS} most recent are drawn on the chart</span>
+                )}
+              </span>
+            </div>
           </div>
 
           {/* List */}

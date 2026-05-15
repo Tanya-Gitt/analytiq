@@ -19,6 +19,12 @@ from app.deps import get_org_db
 
 router = APIRouter()
 
+# Hard cap on annotations per (org, segment). Charts can only visually fit
+# ~8 stacked labels at the standard 200px height; we allow some headroom for
+# users to keep historical markers around. Anything past this is rejected
+# at create time so the table never grows unbounded.
+MAX_ANNOTATIONS_PER_SEGMENT = 20
+
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
@@ -94,6 +100,20 @@ async def create_annotation(
         parsed_date = datetime.date.fromisoformat(body.date)
     except ValueError:
         raise HTTPException(400, "date must be in YYYY-MM-DD format")
+
+    # Enforce per-segment cap before insert.
+    existing = await db.fetchval(
+        "SELECT COUNT(*) FROM annotations WHERE segment = $1",
+        body.segment,
+    )
+    if existing >= MAX_ANNOTATIONS_PER_SEGMENT:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Annotation limit reached ({MAX_ANNOTATIONS_PER_SEGMENT} per segment). "
+                f"Delete an older annotation before adding a new one."
+            ),
+        )
 
     try:
         row = await db.fetchrow(

@@ -1,48 +1,40 @@
 import type { Annotation } from '@/lib/api';
 
-// Days within which two adjacent annotations are considered "colliding" and
-// pushed to alternating vertical lanes.
-const MIN_GAP_DAYS = 21;
+// Hard cap on how many annotations a single chart will render. Anything
+// past this gets dropped (oldest first) so the chart stays readable.
+// The Annotations panel under the chart still shows the full list.
+export const MAX_VISIBLE_ANNOTATIONS = 8;
 
 interface LayoutInfo {
-  lane:   number;                       // 0 = top row, 1 = pushed down a row, etc.
-  anchor: 'start' | 'middle' | 'end';   // text-anchor — keeps labels inside the chart
+  lane: number;   // 0 = top row, 1 = next row down, etc.
 }
 
 /**
- * Pre-compute label layout for a set of annotations: vertical lane (so close
- * annotations don't draw on top of each other) and horizontal anchor (so the
- * first/last annotation's text stays inside the chart bounds).
+ * Pre-compute label layout for a chart's annotations.
+ *
+ * To guarantee labels never overlap horizontally (regardless of chart
+ * width or label length), we put every annotation on its own vertical
+ * lane. The chart's top margin grows to fit all lanes.
+ *
+ * If there are more than MAX_VISIBLE_ANNOTATIONS, the oldest ones are
+ * dropped — the chart can't visually accommodate more than ~8 stacked
+ * labels at 200px height, and the full list is always available in the
+ * Annotations panel below the chart.
  */
-export function layoutAnnotations(annotations: Annotation[]): Map<string, LayoutInfo> {
-  const sorted = [...annotations].sort((a, b) => a.date.localeCompare(b.date));
-  const out    = new Map<string, LayoutInfo>();
+export function layoutAnnotations(annotations: Annotation[]): {
+  visible: Annotation[];
+  layout:  Map<string, LayoutInfo>;
+} {
+  // Sort by date, take the most-recent N, then re-sort for stable lane
+  // assignment (oldest visible → lane 0, newest → lane N-1).
+  const recent = [...annotations]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-MAX_VISIBLE_ANNOTATIONS);
 
-  // Greedy lane assignment: for each annotation, find the lowest lane whose
-  // most-recent annotation is at least MIN_GAP_DAYS earlier.
-  const laneLastDate: string[] = [];
+  const layout = new Map<string, LayoutInfo>();
+  recent.forEach((ann, i) => layout.set(ann.id, { lane: i }));
 
-  sorted.forEach((ann, i) => {
-    let lane = -1;
-    for (let l = 0; l < laneLastDate.length; l++) {
-      const gap = (new Date(ann.date).getTime() - new Date(laneLastDate[l]).getTime())
-                  / (24 * 3600 * 1000);
-      if (gap >= MIN_GAP_DAYS) { lane = l; break; }
-    }
-    if (lane === -1) { lane = laneLastDate.length; laneLastDate.push(ann.date); }
-    else             { laneLastDate[lane] = ann.date; }
-
-    // Anchor: clamp the first and last labels inwards so long text doesn't
-    // get clipped at the chart edges.
-    const anchor: LayoutInfo['anchor'] =
-      i === 0                       ? 'start' :
-      i === sorted.length - 1       ? 'end'   :
-                                      'middle';
-
-    out.set(ann.id, { lane, anchor });
-  });
-
-  return out;
+  return { visible: recent, layout };
 }
 
 interface RenderProps {
@@ -52,29 +44,26 @@ interface RenderProps {
 }
 
 /**
- * Build a recharts ReferenceLine `label` renderer for a single annotation.
- * The renderer draws an SVG <text> at the line's x position, offset
- * vertically by lane and anchored according to layout.anchor.
+ * Build a recharts ReferenceLine `label` renderer for one annotation.
+ * Renders SVG <text> centred above the reference line, offset upward
+ * by the annotation's lane.
  */
 export function makeAnnotationLabel({ label, color, layout }: RenderProps) {
-  // recharts passes { viewBox: { x, y, width, height } } where x/y are the
-  // top-of-line anchor; y is the top of the plot area.
+  // recharts passes { viewBox: { x, y, width, height } } where x/y are
+  // the top of the reference line and y is also the top of the plot area.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (props: any) => {
     const vb = props.viewBox ?? { x: 0, y: 0 };
-    const yOffset = -8 - layout.lane * 13;       // above plot area, stacked by lane
-    // Nudge horizontally based on anchor so 'end' sits just left of the line
-    // (otherwise text hangs off the right edge of the chart).
-    const xOffset = layout.anchor === 'end'   ? -4
-                  : layout.anchor === 'start' ?  4
-                  :                              0;
+    // Stack from the top of the chart downward; lane 0 sits closest to
+    // the plot, higher lanes sit further above.
+    const yOffset = -6 - (layout.lane * 13);
     return (
       <text
-        x={vb.x + xOffset}
+        x={vb.x}
         y={vb.y + yOffset}
         fill={color}
         fontSize={10}
-        textAnchor={layout.anchor}
+        textAnchor="middle"
       >
         {label}
       </text>
