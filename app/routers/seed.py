@@ -321,6 +321,9 @@ async def _do_reseed_misc(pool: asyncpg.Pool):
             await conn.execute("DELETE FROM annotations WHERE org_id = $1::uuid", oid)
             await conn.execute("DELETE FROM anomaly_events WHERE org_id = $1::uuid", oid)
             await conn.execute("DELETE FROM scheduled_reports WHERE org_id = $1::uuid", oid)
+            await conn.execute("DELETE FROM events WHERE org_id = $1::uuid AND event_name = 'identify'", oid)
+            await conn.execute("DELETE FROM heatmap_events WHERE org_id = $1::uuid", oid)
+            await conn.execute("DELETE FROM event_schemas WHERE org_id = $1::uuid", oid)
 
             # connectors: type IN ('sheets_csv','csv_upload','webhook','js_sdk'), segment IN ('A','B')
             # NOTE: asyncpg codec calls json.dumps() automatically for JSONB — pass raw dicts, NOT json.dumps() strings
@@ -359,9 +362,12 @@ async def _do_reseed_misc(pool: asyncpg.Pool):
                  (oid,"A",(NOW-timedelta(days=30)).date(),"v2.0 Release 🎉","#3b82f6"),
                  (oid,"B",(NOW-timedelta(days=7)).date(),"Enterprise partnership 🤝","#8b5cf6")])
 
+            # anomaly_events: include recent ones so summary cards (24h/7d) show non-zero
             await conn.executemany(
                 "INSERT INTO anomaly_events (org_id,metric,value,baseline,std_dev,z_score,direction,severity,detected_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9)",
-                [(oid,"events_count",4200,600,80,45.0,"high","critical",NOW-timedelta(days=210)),
+                [(oid,"events_count",4500,650,85,45.3,"high","critical",NOW-timedelta(hours=3)),
+                 (oid,"error_rate",12.5,2.1,0.8,12.9,"high","critical",NOW-timedelta(days=3)),
+                 (oid,"events_count",4200,600,80,45.0,"high","critical",NOW-timedelta(days=210)),
                  (oid,"revenue_total",85,1800,220,-7.8,"low","critical",NOW-timedelta(days=45)),
                  (oid,"events_count",5800,900,110,44.5,"high","critical",NOW-timedelta(days=30))])
 
@@ -369,5 +375,65 @@ async def _do_reseed_misc(pool: asyncpg.Pool):
                 "INSERT INTO scheduled_reports (org_id,name,metric,period,recipients,enabled,created_by,last_run_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7::uuid,$8)",
                 [(oid,"Weekly DAU Summary","dau","weekly",[DEMO_EMAIL],True,uid,NOW-timedelta(days=7)),
                  (oid,"Monthly Revenue Report","revenue_total","monthly",[DEMO_EMAIL],True,uid,NOW-timedelta(days=30))])
+
+            # identify events — enables People page and Churn traits display
+            _DEMO_PROFILES = [
+                ("usr_power_001","alice.johnson@acmecorp.com","Alice Johnson","enterprise","Acme Corp","US"),
+                ("usr_power_002","bob.smith@techco.io","Bob Smith","pro","TechCo","GB"),
+                ("usr_power_003","priya.patel@startup.in","Priya Patel","pro","StartupIN","IN"),
+                ("usr_power_004","carlos.m@globalinc.com","Carlos Mendez","enterprise","GlobalInc","DE"),
+                ("usr_power_005","sarah.k@saasly.com","Sarah Kim","enterprise","SaaSly","SG"),
+                ("usr_regular_001","james.w@freelance.io","James Wilson","starter","Freelance","AU"),
+                ("usr_regular_002","emily.c@designstudio.co","Emily Chen","pro","DesignStudio","CA"),
+                ("usr_regular_003","michael.b@analytics.co","Michael Brown","pro","AnalyticsCo","US"),
+                ("usr_regular_004","olivia.d@marketers.io","Olivia Davis","starter","Marketers IO","FR"),
+                ("usr_regular_005","noah.t@devtools.dev","Noah Taylor","pro","DevTools","US"),
+                ("usr_regular_006","ava.m@cloudnine.io","Ava Martinez","starter","CloudNine","GB"),
+                ("usr_regular_007","liam.a@fintech.co","Liam Anderson","enterprise","FintechCo","SG"),
+                ("usr_regular_008","mia.t@healthtech.io","Mia Thomas","pro","HealthTech","AU"),
+                ("usr_regular_009","ethan.j@edtech.co","Ethan Jackson","starter","EdTechCo","IN"),
+                ("usr_regular_010","sophia.w@ecommerce.io","Sophia White","pro","eCommerce IO","US"),
+                ("usr_occasional_001","mason.h@agency.co","Mason Harris","starter","Agency","CA"),
+                ("usr_occasional_002","isabella.m@creative.io","Isabella Martin","starter","Creative IO","DE"),
+                ("usr_churned_001","logan.t@oldco.com","Logan Thompson","starter","OldCo","US"),
+                ("usr_churned_002","charlotte.g@legacy.io","Charlotte Garcia","pro","Legacy IO","GB"),
+                ("usr_churned_003","elijah.m@pasttech.co","Elijah Moore","starter","PastTech","AU"),
+            ]
+            await conn.executemany(
+                "INSERT INTO events (org_id,event_name,user_id,anonymous_id,properties,received_at) VALUES ($1::uuid,$2,$3,$4,$5,$6)",
+                [(oid,"identify",uid_,None,
+                  {"email":email,"name":name,"plan":plan,"company":company,"country":country},
+                  NOW-timedelta(days=rng.randint(1,60)))
+                 for uid_,email,name,plan,company,country in _DEMO_PROFILES])
+
+            # heatmap_events — enables Heatmaps page
+            _HMAP_PAGES = ["/dashboard","/events","/funnels","/people","/settings","/pricing"]
+            _ELEMENTS   = ["button.btn-primary","a.nav-link","div.card","h1.page-title","span.badge","input.search"]
+            hmap_rows = []
+            for _ in range(300):
+                pg  = rng.choice(_HMAP_PAGES)
+                evt = rng.choices(["click","scroll"], weights=[60,40], k=1)[0]
+                hmap_rows.append((
+                    oid, pg, evt,
+                    rng.randint(5,95) if evt=="click" else None,
+                    rng.randint(5,95),
+                    rng.choice(_ELEMENTS) if evt=="click" else None,
+                    rng.choice(ALL_ACTIVE) if rng.random()<0.7 else None,
+                    NOW - timedelta(days=rng.randint(0,29), hours=rng.randint(0,23)),
+                ))
+            await conn.executemany(
+                "INSERT INTO heatmap_events (org_id,page_url,event_type,x_pct,y_pct,element,user_id,received_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8)",
+                hmap_rows)
+
+            # event_schemas — enables Schema Registry page
+            await conn.executemany(
+                "INSERT INTO event_schemas (org_id,event_name,properties,strict_mode) VALUES ($1::uuid,$2,$3,$4)",
+                [(oid,"page_view",    {"page":"string","duration_s":"number","browser":"string","country":"string"},False),
+                 (oid,"button_click", {"element_id":"string","page":"string","label":"string"},False),
+                 (oid,"identify",     {"email":"string","name":"string","plan":"string","company":"string"},True),
+                 (oid,"purchase",     {"plan":"string","amount":"number","billing":"string"},True),
+                 (oid,"signup",       {"email":"string","source":"string"},True),
+                 (oid,"feature_used", {"feature":"string","page":"string"},False),
+                 (oid,"error",        {"message":"string","code":"number","page":"string"},False)])
 
     return {"status": "reseeded_misc", "org_id": oid}

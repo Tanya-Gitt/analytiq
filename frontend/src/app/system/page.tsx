@@ -4,6 +4,8 @@ import useSWR from 'swr';
 import AppShell from '@/components/layout/AppShell';
 import { getToken } from '@/lib/auth';
 
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api';
+
 interface HealthData {
   status: string;
   db_latency_ms: number;
@@ -26,7 +28,7 @@ interface ThroughputPoint {
 }
 
 const fetcher = (url: string) =>
-  fetch(`/api/${url}`, { headers: { Authorization: `Bearer ${getToken()}` } })
+  fetch(`${BASE}/${url}`, { headers: { Authorization: `Bearer ${getToken()}` } })
     .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); });
 
 function StatusBadge({ status }: { status: string }) {
