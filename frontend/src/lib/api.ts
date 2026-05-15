@@ -13,14 +13,20 @@ async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeader(),
-      ...(options.headers ?? {}),
-    },
-  });
+  const url = `${BASE}${path}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeader(),
+        ...(options.headers ?? {}),
+      },
+    });
+  } catch (e: unknown) {
+    throw new Error(`[${url}] ${e instanceof Error ? e.message : String(e)}`);
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
