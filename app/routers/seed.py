@@ -301,9 +301,7 @@ async def reseed_misc(secret: str = "", pool: asyncpg.Pool = Depends(get_pool)):
 
     async with pool.acquire() as conn:
         async with conn.transaction():
-            await conn.execute(f"SET LOCAL app.org_id = '{oid}'")
-            await conn.execute("SET LOCAL ROLE app_role")
-
+            # Run as superuser (bypasses RLS) — seed data is pre-trusted
             # Wipe existing misc data for demo org
             await conn.execute("DELETE FROM connectors WHERE org_id = $1::uuid", oid)
             await conn.execute("DELETE FROM alert_rules WHERE org_id = $1::uuid", oid)
@@ -313,12 +311,14 @@ async def reseed_misc(secret: str = "", pool: asyncpg.Pool = Depends(get_pool)):
             await conn.execute("DELETE FROM anomaly_events WHERE org_id = $1::uuid", oid)
             await conn.execute("DELETE FROM scheduled_reports WHERE org_id = $1::uuid", oid)
 
-            # Re-insert
+            # Re-insert — use types/values that match the schema CHECK constraints
+            # connectors.type: ('sheets_csv','csv_upload','webhook','js_sdk')
+            # connectors.segment: ('A','B') — required NOT NULL
             await conn.executemany(
-                "INSERT INTO connectors (org_id,type,name,config,status,last_synced_at) VALUES ($1::uuid,$2,$3,$4,$5,$6)",
-                [(oid,"stripe","Stripe Production",json.dumps({"mode":"live"}),"active",NOW-timedelta(days=1)),
-                 (oid,"csv","Monthly Cohort CSV",json.dumps({"schedule":"weekly"}),"active",NOW-timedelta(days=3)),
-                 (oid,"webhook","Zapier Webhook",json.dumps({"events":["purchase","signup"]}),"paused",NOW-timedelta(days=14))])
+                "INSERT INTO connectors (org_id,type,name,segment,config,status,last_synced_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7)",
+                [(oid,"webhook","Stripe Revenue Webhook","B",json.dumps({"events":["payment.succeeded","subscription.created"]}),"active",NOW-timedelta(days=1)),
+                 (oid,"csv_upload","Monthly Cohort CSV","A",json.dumps({"schedule":"weekly","last_file":"cohort_may_2026.csv"}),"active",NOW-timedelta(days=3)),
+                 (oid,"js_sdk","Web SDK (Production)","A",json.dumps({"site":"analytiq-phi.vercel.app"}),"active",NOW-timedelta(hours=2))])
 
             await conn.executemany(
                 "INSERT INTO alert_rules (org_id,name,metric,operator,threshold,period_minutes,channels,enabled) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8)",
