@@ -16,7 +16,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from app.deps import get_org_db
+from app.deps import get_org_db, get_org_db_by_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -42,9 +42,13 @@ class HeatmapBatch(BaseModel):
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 def _normalise_url(url: str) -> str:
-    """Keep only scheme + host + path; strip query and fragment."""
+    """Keep only scheme + host + path; strip query and fragment.
+    Path-only inputs (no scheme) are returned as just the path."""
     try:
         p = urlparse(url)
+        if not p.scheme:
+            # Already a bare path like "/people" — strip query/fragment only
+            return p.path.rstrip("/") or "/"
         return f"{p.scheme}://{p.netloc}{p.path}".rstrip("/") or url
     except Exception:
         return url[:500]
@@ -52,10 +56,11 @@ def _normalise_url(url: str) -> str:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@router.post("/heatmap", status_code=204)
+@router.post("/heatmap/{org_api_key}", status_code=204)
 async def ingest_heatmap(
+    org_api_key: str,
     body: HeatmapBatch,
-    db:   asyncpg.Connection = Depends(get_org_db),
+    db:   asyncpg.Connection = Depends(get_org_db_by_api_key),
 ):
     if not body.events:
         return
