@@ -22,7 +22,7 @@ export default function EventsChart({ data, annotations = [] }: Props) {
 
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <BarChart data={data} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
+      <BarChart data={data} margin={{ top: 24, right: 12, bottom: 0, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
         <XAxis
           dataKey="date"
@@ -50,7 +50,7 @@ export default function EventsChart({ data, annotations = [] }: Props) {
             strokeDasharray="4 2"
             label={{
               value: ann.label,
-              position: 'insideTopRight',
+              position: 'top',
               fontSize: 10,
               fill: ann.color,
             }}

@@ -86,8 +86,10 @@ def _evt(org_id: str, day: int) -> tuple:
     pool = (POWER_USERS*6 + REGULAR_USERS*3 + OCCASIONAL_USERS + CHURNED_USERS*2) if dr > 70 else (POWER_USERS*8 + REGULAR_USERS*4 + OCCASIONAL_USERS)
     uid = rng.choice(pool)
     props: dict = {"platform": rng.choice(["web","mobile_web"]), "browser": rng.choice(BROWSERS), "country": rng.choice(COUNTRIES)}
-    if en == "page_view":    props.update({"page": rng.choice(PAGES), "duration_s": rng.randint(5,420)})
-    elif en == "feature_used": props["feature"] = rng.choice(FEATURES)
+    if en == "page_view":
+        props.update({"page": rng.choice(PAGES), "duration_s": rng.randint(5,420)})
+    elif en == "feature_used":
+        props["feature"] = rng.choice(FEATURES)
     elif en == "purchase":
         pl = rng.choice(PLANS)
         ann = rng.random() < 0.35

@@ -44,8 +44,8 @@ from app.routers import ingest as ingest_router
 from app.routers import paths as paths_router
 from app.routers import people as people_router
 from app.routers import reports as reports_router
-from app.routers import seed as seed_router
 from app.routers import schema_registry as schema_registry_router
+from app.routers import seed as seed_router
 from app.routers import setup as setup_router
 from app.routers import share as share_router
 from app.routers import sso as sso_router

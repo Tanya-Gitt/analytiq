@@ -28,7 +28,7 @@ export default function RevenueChart({ data, annotations = [] }: Props) {
 
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <AreaChart data={data} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
+      <AreaChart data={data} margin={{ top: 24, right: 12, bottom: 0, left: 0 }}>
         <defs>
           <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.2} />
@@ -63,7 +63,7 @@ export default function RevenueChart({ data, annotations = [] }: Props) {
             strokeDasharray="4 2"
             label={{
               value: ann.label,
-              position: 'insideTopRight',
+              position: 'top',
               fontSize: 10,
               fill: ann.color,
             }}
