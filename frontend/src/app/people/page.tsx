@@ -131,9 +131,9 @@ function ProfilePanel({ userId }: { userId: string }) {
   if (error || !data) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-3">
-        <p className="text-2xl">⏳</p>
-        <p className="text-sm font-medium text-gray-600">Backend waking up…</p>
-        <p className="text-xs text-gray-400">Retrying automatically every 8 seconds</p>
+        <p className="text-2xl">⚠️</p>
+        <p className="text-sm font-medium text-gray-600">Could not load profile</p>
+        <p className="text-xs text-red-500 font-mono px-4 text-center break-all">{error?.message ?? 'No data'}</p>
         <button
           onClick={() => mutate()}
           className="mt-1 text-xs px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100"
