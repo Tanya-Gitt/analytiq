@@ -301,7 +301,9 @@ async def reseed_misc(secret: str = "", pool: asyncpg.Pool = Depends(get_pool)):
 
     async with pool.acquire() as conn:
         async with conn.transaction():
-            # Run as superuser (bypasses RLS) — seed data is pre-trusted
+            # FORCE RLS applies even to the table owner, so we must set app.org_id
+            await conn.execute(f"SET LOCAL app.org_id = '{oid}'")
+
             # Wipe existing misc data for demo org
             await conn.execute("DELETE FROM connectors WHERE org_id = $1::uuid", oid)
             await conn.execute("DELETE FROM alert_rules WHERE org_id = $1::uuid", oid)
@@ -311,20 +313,19 @@ async def reseed_misc(secret: str = "", pool: asyncpg.Pool = Depends(get_pool)):
             await conn.execute("DELETE FROM anomaly_events WHERE org_id = $1::uuid", oid)
             await conn.execute("DELETE FROM scheduled_reports WHERE org_id = $1::uuid", oid)
 
-            # Re-insert — use types/values that match the schema CHECK constraints
-            # connectors.type: ('sheets_csv','csv_upload','webhook','js_sdk')
-            # connectors.segment: ('A','B') — required NOT NULL
+            # connectors: type IN ('sheets_csv','csv_upload','webhook','js_sdk'), segment IN ('A','B')
             await conn.executemany(
                 "INSERT INTO connectors (org_id,type,name,segment,config,status,last_synced_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7)",
                 [(oid,"webhook","Stripe Revenue Webhook","B",json.dumps({"events":["payment.succeeded","subscription.created"]}),"active",NOW-timedelta(days=1)),
                  (oid,"csv_upload","Monthly Cohort CSV","A",json.dumps({"schedule":"weekly","last_file":"cohort_may_2026.csv"}),"active",NOW-timedelta(days=3)),
                  (oid,"js_sdk","Web SDK (Production)","A",json.dumps({"site":"analytiq-phi.vercel.app"}),"active",NOW-timedelta(hours=2))])
 
+            # alert_rules: condition IN ('below','above','no_data'), channel IN ('slack','email')
             await conn.executemany(
-                "INSERT INTO alert_rules (org_id,name,metric,operator,threshold,period_minutes,channels,enabled) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8)",
-                [(oid,"DAU drops below 30","dau","lt",30,1440,json.dumps(["email"]),True),
-                 (oid,"Daily revenue below $200","revenue_total","lt",200,1440,json.dumps(["email","slack"]),True),
-                 (oid,"Error rate above 5%","error_rate","gt",5,60,json.dumps(["slack"]),True)])
+                "INSERT INTO alert_rules (org_id,name,metric,condition,threshold,window_hours,channel,destination) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8)",
+                [(oid,"DAU drops below 30","dau","below",30,24,"email","alerts@analytiq.io"),
+                 (oid,"Daily revenue below $200","revenue_total","below",200,24,"slack","#alerts"),
+                 (oid,"Error rate above 5%","error_rate","above",5,1,"slack","#ops")])
 
             await conn.executemany(
                 "INSERT INTO funnels (org_id,name,steps) VALUES ($1::uuid,$2,$3)",
