@@ -223,11 +223,14 @@ async def seed_demo(secret: str = "", pool: asyncpg.Pool = Depends(get_pool)):
                  (oid,"A",(NOW-timedelta(days=90)).date(),"Pricing update 💰","#ef4444"),
                  (oid,"A",(NOW-timedelta(days=30)).date(),"v2.0 Release 🎉","#3b82f6"),
                  (oid,"B",(NOW-timedelta(days=7)).date(),"Enterprise partnership 🤝","#8b5cf6")])
+            # std_dev sized realistically so z-scores stay in the 3-6σ range
+            # (warning ≥3σ, critical ≥4σ). Earlier values like z=45 were
+            # mathematically impossible for any real dataset.
             await conn.executemany(
                 "INSERT INTO anomaly_events (org_id,metric,value,baseline,std_dev,z_score,direction,severity,detected_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9)",
-                [(oid,"events_count",4200,600,80,45.0,"high","critical",NOW-timedelta(days=210)),
-                 (oid,"revenue_total",85,1800,220,-7.8,"low","critical",NOW-timedelta(days=45)),
-                 (oid,"events_count",5800,900,110,44.5,"high","critical",NOW-timedelta(days=30))])
+                [(oid,"events_count",1480,600,170,5.2,"high","critical",NOW-timedelta(days=210)),
+                 (oid,"revenue_total",740,1800,350,-3.0,"low","warning",NOW-timedelta(days=45)),
+                 (oid,"events_count",2050,900,220,5.2,"high","critical",NOW-timedelta(days=30))])
             await conn.executemany(
                 "INSERT INTO scheduled_reports (org_id,name,metric,period,recipients,enabled,created_by,last_run_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7::uuid,$8)",
                 [(oid,"Weekly DAU Summary","dau","weekly",[DEMO_EMAIL],True,uid,NOW-timedelta(days=7)),
@@ -364,14 +367,18 @@ async def _do_reseed_misc(pool: asyncpg.Pool):
                  (oid,"A",(NOW-timedelta(days=30)).date(),"v2.0 Release 🎉","#3b82f6"),
                  (oid,"B",(NOW-timedelta(days=7)).date(),"Enterprise partnership 🤝","#8b5cf6")])
 
-            # anomaly_events: include recent ones so summary cards (24h/7d) show non-zero
+            # anomaly_events: realistic z-scores (warning 3-4σ, critical >4σ).
+            # Include both fresh (<24h) and aged anomalies so the summary
+            # cards on /anomalies show non-zero 24h, 7d, critical, and warning
+            # counts without resorting to physically-impossible spike values.
             await conn.executemany(
                 "INSERT INTO anomaly_events (org_id,metric,value,baseline,std_dev,z_score,direction,severity,detected_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9)",
-                [(oid,"events_count",4500,650,85,45.3,"high","critical",NOW-timedelta(hours=3)),
-                 (oid,"error_rate",12.5,2.1,0.8,12.9,"high","critical",NOW-timedelta(days=3)),
-                 (oid,"events_count",4200,600,80,45.0,"high","critical",NOW-timedelta(days=210)),
-                 (oid,"revenue_total",85,1800,220,-7.8,"low","critical",NOW-timedelta(days=45)),
-                 (oid,"events_count",5800,900,110,44.5,"high","critical",NOW-timedelta(days=30))])
+                [(oid,"events_count",1490,650,180,4.7,"high","critical",NOW-timedelta(hours=4)),
+                 (oid,"error_rate",4.2,2.1,0.6,3.5,"high","warning",NOW-timedelta(hours=9)),
+                 (oid,"error_rate",5.2,2.1,0.6,5.2,"high","critical",NOW-timedelta(days=3)),
+                 (oid,"events_count",2050,900,220,5.2,"high","critical",NOW-timedelta(days=30)),
+                 (oid,"revenue_total",740,1800,350,-3.0,"low","warning",NOW-timedelta(days=45)),
+                 (oid,"events_count",1480,600,170,5.2,"high","critical",NOW-timedelta(days=210))])
 
             await conn.executemany(
                 "INSERT INTO scheduled_reports (org_id,name,metric,period,recipients,enabled,created_by,last_run_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7::uuid,$8)",
